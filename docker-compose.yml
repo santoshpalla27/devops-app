@@ -63,8 +63,9 @@ services:
       - "3306:3306"
     volumes:
       - mysql-primary-data:/var/lib/mysql
-    command: >
-      --server-id=1 --log-bin=mysql-bin --binlog-format=ROW --gtid-mode=ON --enforce-gtid-consistency=ON
+      - ./config/mysql/primary.cnf:/etc/mysql/conf.d/primary.cnf:ro
+      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
     networks:
       - controlplane-net
     healthcheck:
@@ -84,8 +85,8 @@ services:
       - "3307:3306"
     volumes:
       - mysql-replica-data:/var/lib/mysql
-    command: >
-      --server-id=2 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+      - ./config/mysql/replica.cnf:/etc/mysql/conf.d/replica.cnf:ro
+    command: --server-id=2 --read-only=1
     depends_on:
       mysql-primary:
         condition: service_healthy
@@ -215,14 +216,12 @@ services:
     ports:
       - "9090:9090"
     volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
-    configs:
-      - source: prometheus_config
-        target: /etc/prometheus/prometheus.yml
     networks:
       - controlplane-net
     healthcheck:
@@ -242,6 +241,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
     networks:
@@ -256,60 +256,14 @@ services:
     image: otel/opentelemetry-collector-contrib:0.88.0
     container_name: otel-collector
     ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "8888:8888" # Metrics
-    configs:
-      - source: otel_config
-        target: /etc/otelcol-contrib/config.yaml
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+    volumes:
+      - ./config/otel/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
     command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
     networks:
       - controlplane-net
-
-configs:
-  prometheus_config:
-    content: |
-      global:
-        scrape_interval: 15s
-        evaluation_interval: 15s
-      scrape_configs:
-        - job_name: 'controlplane-backend'
-          metrics_path: '/actuator/prometheus'
-          static_configs:
-            - targets: ['backend:8080']
-          scrape_interval: 10s
-        - job_name: 'prometheus'
-          static_configs:
-            - targets: ['localhost:9090']
-
-  otel_config:
-    content: |
-      receivers:
-        otlp:
-          protocols:
-            grpc:
-              endpoint: 0.0.0.0:4317
-            http:
-              endpoint: 0.0.0.0:4318
-      processors:
-        batch:
-          timeout: 1s
-          send_batch_size: 1024
-      exporters:
-        logging:
-          verbosity: detailed
-        prometheus:
-          endpoint: "0.0.0.0:8889"
-      service:
-        pipelines:
-          traces:
-            receivers: [otlp]
-            processors: [batch]
-            exporters: [logging]
-          metrics:
-            receivers: [otlp]
-            processors: [batch]
-            exporters: [prometheus]
 
 networks:
   controlplane-net:

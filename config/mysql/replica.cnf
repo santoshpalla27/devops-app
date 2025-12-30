@@ -1,0 +1,6 @@
+[mysqld]
+server-id=2
+read-only=ON
+gtid-mode=ON
+enforce-gtid-consistency=ON
+log-slave-updates=ON
