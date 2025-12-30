@@ -1,0 +1,269 @@
+version: '3.8'
+
+services:
+  # ==================== Application Services ====================
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: controlplane-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - MYSQL_URL=jdbc:mysql://mysql-primary:3306/controlplane
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - REDIS_HOST=redis-master
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - JAVA_OPTS=-Xms256m -Xmx512m
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health/liveness" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: controlplane-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== MySQL (Primary-Replica) ====================
+
+  mysql-primary:
+    image: mysql:8.0
+    container_name: mysql-primary
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: controlplane
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-primary-data:/var/lib/mysql
+      - ./config/mysql/primary.cnf:/etc/mysql/conf.d/primary.cnf:ro
+      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mysql-replica:
+    image: mysql:8.0
+    container_name: mysql-replica
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: controlplane
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-replica-data:/var/lib/mysql
+      - ./config/mysql/replica.cnf:/etc/mysql/conf.d/replica.cnf:ro
+    command: --server-id=2 --read-only=1
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== Redis (Master + Sentinel) ====================
+
+  redis-master:
+    image: redis:7-alpine
+    container_name: redis-master
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-master-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: redis-replica
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --replicaof redis-master 6379
+    depends_on:
+      - redis-master
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-sentinel:
+    image: redis:7-alpine
+    container_name: redis-sentinel
+    ports:
+      - "26379:26379"
+    volumes:
+      - ./config/redis/sentinel.conf:/etc/redis/sentinel.conf:rw
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      - redis-master
+      - redis-replica
+    networks:
+      - controlplane-net
+
+  # ==================== Kafka ====================
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "2181" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==================== Observability ====================
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.88.0
+    container_name: otel-collector
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "8888:8888" # Metrics
+    volumes:
+      - ./config/otel/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
+    networks:
+      - controlplane-net
+
+networks:
+  controlplane-net:
+    driver: bridge
+
+volumes:
+  mysql-primary-data:
+  mysql-replica-data:
+  redis-master-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+  prometheus-data:
+  grafana-data:
