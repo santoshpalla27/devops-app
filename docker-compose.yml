@@ -147,7 +147,10 @@ services:
       - controlplane-net
     entrypoint: >
       sh -c '
-        echo "sentinel monitor mymaster redis-master 6379 1" > /tmp/sentinel.conf &&
+        sleep 5 &&
+        echo "sentinel resolve-hostnames yes" > /tmp/sentinel.conf &&
+        echo "sentinel announce-hostnames yes" >> /tmp/sentinel.conf &&
+        echo "sentinel monitor mymaster redis-master 6379 1" >> /tmp/sentinel.conf &&
         echo "sentinel down-after-milliseconds mymaster 5000" >> /tmp/sentinel.conf &&
         echo "sentinel failover-timeout mymaster 60000" >> /tmp/sentinel.conf &&
         echo "sentinel parallel-syncs mymaster 1" >> /tmp/sentinel.conf &&
@@ -158,6 +161,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # ==================== Kafka ====================
 
