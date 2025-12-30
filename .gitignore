@@ -1,0 +1,232 @@
+# ==================== Java / Maven ====================
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Maven
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.properties
+
+# ==================== Gradle (if used) ====================
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ==================== Node.js / npm ====================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ==================== IDE Files ====================
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ==================== OS Generated ====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==================== Docker ====================
+# Local docker-compose overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Docker volumes (if stored locally)
+data/
+.docker/
+
+# ==================== Logs ====================
+*.log
+logs/
+log/
+
+# ==================== Spring Boot ====================
+HELP.md
+.springcloud.config
+
+# ==================== Application Secrets ====================
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Secrets and credentials
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+application-secrets.yml
+application-secrets.properties
+
+# ==================== Database ====================
+# H2 database files
+*.db
+*.h2.db
+*.lock.db
+*.trace.db
+
+# MySQL/PostgreSQL data
+mysql-data/
+postgres-data/
+redis-data/
+
+# ==================== Testing ====================
+# Test output
+test-output/
+surefire-reports/
+failsafe-reports/
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output/
+htmlcov/
+.coverage
+.coverage.*
+jacoco.exec
+target/site/jacoco/
+
+# ==================== Caching ====================
+# npm/Yarn
+.npm
+.pnpm-store/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Maven
+.m2/repository/
+
+# Vite
+.vite/
+
+# ESLint
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# ==================== Temporary Files ====================
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.backup
+
+# ==================== Misc ====================
+# Terraform (if used)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Kubernetes (local)
+kubeconfig
+*.kubeconfig
+
+# JRebel
+rebel.xml
+
+# SonarQube
+.sonar/
+.scannerwork/
+
+# Checkstyle
+.checkstyle
+
+# PMD
+.pmd
+
+# Editor backup files
+*~
+\#*\#
+.\#*
