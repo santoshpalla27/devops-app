@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ==================== Application Services ====================
 
@@ -65,9 +63,8 @@ services:
       - "3306:3306"
     volumes:
       - mysql-primary-data:/var/lib/mysql
-      - ./config/mysql/primary.cnf:/etc/mysql/conf.d/primary.cnf:ro
-      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW
+    command: >
+      --server-id=1 --log-bin=mysql-bin --binlog-format=ROW --gtid-mode=ON --enforce-gtid-consistency=ON
     networks:
       - controlplane-net
     healthcheck:
@@ -87,8 +84,8 @@ services:
       - "3307:3306"
     volumes:
       - mysql-replica-data:/var/lib/mysql
-      - ./config/mysql/replica.cnf:/etc/mysql/conf.d/replica.cnf:ro
-    command: --server-id=2 --read-only=1
+    command: >
+      --server-id=2 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
     depends_on:
       mysql-primary:
         condition: service_healthy
@@ -100,7 +97,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ==================== Redis (Master + Sentinel) ====================
+  # ==================== Redis (Master + Replica + Sentinel) ====================
 
   redis-master:
     image: redis:7-alpine
@@ -125,7 +122,8 @@ services:
       - "6380:6379"
     command: redis-server --appendonly yes --replicaof redis-master 6379
     depends_on:
-      - redis-master
+      redis-master:
+        condition: service_healthy
     networks:
       - controlplane-net
     healthcheck:
@@ -139,14 +137,26 @@ services:
     container_name: redis-sentinel
     ports:
       - "26379:26379"
-    volumes:
-      - ./config/redis/sentinel.conf:/etc/redis/sentinel.conf:rw
-    command: redis-sentinel /etc/redis/sentinel.conf
     depends_on:
-      - redis-master
-      - redis-replica
+      redis-master:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
     networks:
       - controlplane-net
+    entrypoint: >
+      sh -c '
+        echo "sentinel monitor mymaster redis-master 6379 1" > /tmp/sentinel.conf &&
+        echo "sentinel down-after-milliseconds mymaster 5000" >> /tmp/sentinel.conf &&
+        echo "sentinel failover-timeout mymaster 60000" >> /tmp/sentinel.conf &&
+        echo "sentinel parallel-syncs mymaster 1" >> /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      '
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-p", "26379", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ==================== Kafka ====================
 
@@ -205,12 +215,14 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
     networks:
       - controlplane-net
     healthcheck:
@@ -230,7 +242,6 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
     networks:
@@ -248,11 +259,57 @@ services:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
       - "8888:8888" # Metrics
-    volumes:
-      - ./config/otel/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    configs:
+      - source: otel_config
+        target: /etc/otelcol-contrib/config.yaml
     command: [ "--config=/etc/otelcol-contrib/config.yaml" ]
     networks:
       - controlplane-net
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+      scrape_configs:
+        - job_name: 'controlplane-backend'
+          metrics_path: '/actuator/prometheus'
+          static_configs:
+            - targets: ['backend:8080']
+          scrape_interval: 10s
+        - job_name: 'prometheus'
+          static_configs:
+            - targets: ['localhost:9090']
+
+  otel_config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+      processors:
+        batch:
+          timeout: 1s
+          send_batch_size: 1024
+      exporters:
+        logging:
+          verbosity: detailed
+        prometheus:
+          endpoint: "0.0.0.0:8889"
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [logging]
+          metrics:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [prometheus]
 
 networks:
   controlplane-net:

@@ -4,6 +4,8 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+combine-code.ps1
+combined-code.txt
 # Maven
 *.jar
 *.war
