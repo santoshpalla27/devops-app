@@ -14,7 +14,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
-    @Value("${controlplane.websocket.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    @Value("${CORS_ALLOWED_ORIGINS:*}")
     private String allowedOrigins;
     
     @Override
@@ -30,12 +30,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // WebSocket endpoint for STOMP connections
+        // CORS origins controlled via environment variable
         registry.addEndpoint("/ws")
-            .setAllowedOrigins(allowedOrigins.split(","))
+            .setAllowedOriginPatterns(allowedOrigins.split(","))
             .withSockJS();
         
         // Also allow direct WebSocket without SockJS
         registry.addEndpoint("/ws")
-            .setAllowedOrigins(allowedOrigins.split(","));
+            .setAllowedOriginPatterns(allowedOrigins.split(","));
     }
 }
