@@ -5,7 +5,6 @@ import {
     AlertTriangle,
     BarChart3,
     RefreshCw,
-    Settings,
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { SystemHealthDashboard } from './pages/SystemHealthDashboard';

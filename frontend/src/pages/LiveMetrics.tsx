@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-    LineChart,
-    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -37,12 +35,11 @@ export function LiveMetrics({ health }: Props) {
             time: new Date().toLocaleTimeString(),
             mysql: health.connectionStatuses?.mysql?.latencyMs ?? 0,
             redis: health.connectionStatuses?.redis?.latencyMs ?? 0,
-            kafka: 0, // Kafka latency from health status
+            kafka: 0,
         };
 
         setLatencyHistory((prev) => {
             const updated = [...prev, newPoint];
-            // Keep last 30 data points
             return updated.slice(-30);
         });
     }, [health?.lastUpdated]);
@@ -303,7 +300,7 @@ function calculateTrend(history: LatencyDataPoint[], system: keyof Omit<LatencyD
     const last = recent[recent.length - 1][system];
 
     const diff = last - first;
-    const threshold = first * 0.1; // 10% threshold
+    const threshold = first * 0.1;
 
     if (diff > threshold) return 'up';
     if (diff < -threshold) return 'down';
