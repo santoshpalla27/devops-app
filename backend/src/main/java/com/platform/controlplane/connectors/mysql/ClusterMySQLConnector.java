@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -33,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ClusterMySQLConnector implements MySQLConnector {
     
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     private final Map<String, HikariDataSource> nodeDataSources;
@@ -50,12 +54,14 @@ public class ClusterMySQLConnector implements MySQLConnector {
     @Value("${controlplane.mysql.cluster.database:controlplane}")
     private String database;
     
-    public ClusterMySQLConnector(MetricsRegistry metricsRegistry) {
+    public ClusterMySQLConnector(MetricsRegistry metricsRegistry, SystemStateMachine stateMachine) {
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("mysql"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("mysql"));
         this.nodeDataSources = new ConcurrentHashMap<>();
         this.currentPrimary = new AtomicReference<>();
+        stateMachine.initialize("mysql");
     }
     
     @Override
@@ -64,6 +70,7 @@ public class ClusterMySQLConnector implements MySQLConnector {
     public boolean connect() {
         log.info("Attempting to connect to MySQL Cluster");
         long startTime = System.currentTimeMillis();
+        stateMachine.transition("mysql", SystemState.CONNECTING, "Initiating cluster connection");
         
         try {
             String[] nodes = clusterNodes.split(",");
@@ -99,6 +106,9 @@ public class ClusterMySQLConnector implements MySQLConnector {
             }
             
             long latency = System.currentTimeMillis() - startTime;
+            stateMachine.transition("mysql", SystemState.CONNECTED, "Connected to cluster");
+            stateMachine.updateLatency("mysql", latency);
+            
             currentStatus.set(ConnectionStatus.up("mysql", latency, connectedNodes, nodes.length * 20));
             metricsRegistry.recordConnectionSuccess("mysql");
             metricsRegistry.recordLatency("mysql", "connect", latency);
@@ -110,6 +120,7 @@ public class ClusterMySQLConnector implements MySQLConnector {
             
         } catch (Exception e) {
             log.error("Failed to connect to MySQL Cluster: {}", e.getMessage());
+            stateMachine.transition("mysql", SystemState.RETRYING, "Connection failed: " + e.getMessage());
             currentStatus.set(ConnectionStatus.down("mysql", e.getMessage()));
             metricsRegistry.recordConnectionFailure("mysql");
             return false;
@@ -159,6 +170,7 @@ public class ClusterMySQLConnector implements MySQLConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("MySQL Cluster connection circuit breaker triggered: {}", e.getMessage());
+        stateMachine.transition("mysql", SystemState.CIRCUIT_OPEN, "Circuit breaker opened");
         currentStatus.set(ConnectionStatus.down("mysql", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -305,6 +317,7 @@ public class ClusterMySQLConnector implements MySQLConnector {
     @Override
     public void disconnect() {
         log.info("Disconnecting from MySQL Cluster");
+        stateMachine.transition("mysql", SystemState.DISCONNECTED, "Manual disconnect");
         
         for (HikariDataSource ds : nodeDataSources.values()) {
             try {

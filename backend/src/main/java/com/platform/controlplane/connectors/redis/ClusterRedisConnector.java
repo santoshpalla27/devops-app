@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.lettuce.core.RedisURI;
@@ -36,6 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ClusterRedisConnector implements RedisConnector {
     
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     private final AtomicReference<RedisClusterClient> clusterClient;
@@ -50,12 +54,14 @@ public class ClusterRedisConnector implements RedisConnector {
     @Value("${spring.data.redis.timeout:5000ms}")
     private Duration timeout;
     
-    public ClusterRedisConnector(MetricsRegistry metricsRegistry) {
+    public ClusterRedisConnector(MetricsRegistry metricsRegistry, SystemStateMachine stateMachine) {
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("redis"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("redis"));
         this.clusterClient = new AtomicReference<>();
         this.connection = new AtomicReference<>();
+        stateMachine.initialize("redis");
     }
     
     @Override
@@ -64,6 +70,7 @@ public class ClusterRedisConnector implements RedisConnector {
     public boolean connect() {
         log.info("Attempting to connect to Redis Cluster");
         long startTime = System.currentTimeMillis();
+        stateMachine.transition("redis", SystemState.CONNECTING, "Initiating cluster connection");
         
         try {
             List<RedisURI> nodeUris = new ArrayList<>();
@@ -111,6 +118,9 @@ public class ClusterRedisConnector implements RedisConnector {
             }
             
             long latency = System.currentTimeMillis() - startTime;
+            stateMachine.transition("redis", SystemState.CONNECTED, "Connected to cluster");
+            stateMachine.updateLatency("redis", latency);
+            
             currentStatus.set(ConnectionStatus.up("redis", latency, nodeUris.size(), 1000));
             metricsRegistry.recordConnectionSuccess("redis");
             metricsRegistry.recordLatency("redis", "connect", latency);
@@ -121,6 +131,7 @@ public class ClusterRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Failed to connect to Redis Cluster: {}", e.getMessage());
+            stateMachine.transition("redis", SystemState.RETRYING, "Connection failed: " + e.getMessage());
             currentStatus.set(ConnectionStatus.down("redis", e.getMessage()));
             metricsRegistry.recordConnectionFailure("redis");
             return false;
@@ -130,6 +141,7 @@ public class ClusterRedisConnector implements RedisConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("Redis Cluster connection circuit breaker triggered: {}", e.getMessage());
+        stateMachine.transition("redis", SystemState.CIRCUIT_OPEN, "Circuit breaker opened");
         currentStatus.set(ConnectionStatus.down("redis", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -175,6 +187,10 @@ public class ClusterRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Redis Cluster health check failed: {}", e.getMessage());
+            SystemStateContext context = stateMachine.getContext("redis");
+            if (context.currentState() == SystemState.CONNECTED) {
+                stateMachine.transition("redis", SystemState.DEGRADED, "Health check failed");
+            }
             ConnectionStatus status = ConnectionStatus.down("redis", e.getMessage());
             currentStatus.set(status);
             metricsRegistry.recordConnectionFailure("redis");
@@ -293,6 +309,7 @@ public class ClusterRedisConnector implements RedisConnector {
     @PreDestroy
     public void disconnect() {
         log.info("Disconnecting from Redis Cluster");
+        stateMachine.transition("redis", SystemState.DISCONNECTED, "Manual disconnect");
         
         StatefulRedisClusterConnection<String, String> conn = connection.getAndSet(null);
         if (conn != null) {

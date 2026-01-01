@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -31,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ReplicationMySQLConnector implements MySQLConnector {
     
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     private final AtomicReference<HikariDataSource> primaryDataSource;
@@ -48,12 +52,14 @@ public class ReplicationMySQLConnector implements MySQLConnector {
     @Value("${spring.datasource.password:password}")
     private String password;
     
-    public ReplicationMySQLConnector(MetricsRegistry metricsRegistry) {
+    public ReplicationMySQLConnector(MetricsRegistry metricsRegistry, SystemStateMachine stateMachine) {
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("mysql"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("mysql"));
         this.primaryDataSource = new AtomicReference<>();
         this.replicaDataSource = new AtomicReference<>();
+        stateMachine.initialize("mysql");
     }
     
     @Override
@@ -62,6 +68,7 @@ public class ReplicationMySQLConnector implements MySQLConnector {
     public boolean connect() {
         log.info("Attempting to connect to MySQL (replication mode)");
         long startTime = System.currentTimeMillis();
+        stateMachine.transition("mysql", SystemState.CONNECTING, "Initiating replication connection");
         
         try {
             // Connect to primary
@@ -80,6 +87,9 @@ public class ReplicationMySQLConnector implements MySQLConnector {
             }
             
             long latency = System.currentTimeMillis() - startTime;
+            stateMachine.transition("mysql", SystemState.CONNECTED, "Connected to primary and replica");
+            stateMachine.updateLatency("mysql", latency);
+            
             currentStatus.set(ConnectionStatus.up("mysql", latency, 2, 40));
             metricsRegistry.recordConnectionSuccess("mysql");
             metricsRegistry.recordLatency("mysql", "connect", latency);
@@ -90,6 +100,7 @@ public class ReplicationMySQLConnector implements MySQLConnector {
             
         } catch (Exception e) {
             log.error("Failed to connect to MySQL: {}", e.getMessage());
+            stateMachine.transition("mysql", SystemState.RETRYING, "Connection failed: " + e.getMessage());
             currentStatus.set(ConnectionStatus.down("mysql", e.getMessage()));
             metricsRegistry.recordConnectionFailure("mysql");
             return false;
@@ -114,6 +125,7 @@ public class ReplicationMySQLConnector implements MySQLConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("MySQL connection circuit breaker triggered: {}", e.getMessage());
+        stateMachine.transition("mysql", SystemState.CIRCUIT_OPEN, "Circuit breaker opened");
         currentStatus.set(ConnectionStatus.down("mysql", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -288,6 +300,7 @@ public class ReplicationMySQLConnector implements MySQLConnector {
     @Override
     public void disconnect() {
         log.info("Disconnecting from MySQL");
+        stateMachine.transition("mysql", SystemState.DISCONNECTED, "Manual disconnect");
         
         HikariDataSource primary = primaryDataSource.getAndSet(null);
         if (primary != null) {
