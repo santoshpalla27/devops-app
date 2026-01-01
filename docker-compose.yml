@@ -52,7 +52,30 @@ services:
       timeout: 10s
       retries: 3
 
-  # ==================== MySQL (Primary-Replica) ====================
+  # ==================== Tester Service ====================
+
+  tester:
+    build:
+      context: ./tester-service
+      dockerfile: Dockerfile
+    container_name: controlplane-tester
+    environment:
+      - CONTROL_PLANE_URL=http://backend:8080
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - PROMETHEUS_URL=http://prometheus:9090
+    depends_on:
+      backend:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    # Run tests on startup, then exit
+    # Or keep container running for manual test execution
+    # command: [ "ci", "--scenarios-dir", "scenarios" ]
+    # Uncomment below to keep container running for manual tests
+    command: [ "tail", "-f", "/dev/null" ]
+    # ==================== MySQL (Primary-Replica) ====================
 
   mysql-primary:
     image: mysql:8.0
