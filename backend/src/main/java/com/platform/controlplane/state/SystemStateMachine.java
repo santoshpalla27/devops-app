@@ -160,14 +160,21 @@ public class SystemStateMachine {
     private void emitStateChangeEvent(String systemType, SystemState from, SystemState to, String reason) {
         try {
             // Determine event type based on state transition
-            FailureEvent.EventType eventType = switch (to) {
-                case CIRCUIT_OPEN -> FailureEvent.EventType.CIRCUIT_BREAKER_OPENED;
-                case CIRCUIT_OPEN when from == SystemState.RECOVERING -> FailureEvent.EventType.CIRCUIT_BREAKER_CLOSED;
-                case CONNECTED -> FailureEvent.EventType.CONNECTION_ESTABLISHED;
-                case DISCONNECTED -> FailureEvent.EventType.CONNECTION_LOST;
-                case RETRYING -> FailureEvent.EventType.RETRY_ATTEMPTED;
-                default -> FailureEvent.EventType.CONNECTION_ESTABLISHED;
-            };
+            FailureEvent.EventType eventType;
+            
+            if (to == SystemState.CIRCUIT_OPEN && from == SystemState.RECOVERING) {
+                eventType = FailureEvent.EventType.CIRCUIT_BREAKER_CLOSED;
+            } else if (to == SystemState.CIRCUIT_OPEN) {
+                eventType = FailureEvent.EventType.CIRCUIT_BREAKER_OPENED;
+            } else if (to == SystemState.CONNECTED) {
+                eventType = FailureEvent.EventType.CONNECTION_ESTABLISHED;
+            } else if (to == SystemState.DISCONNECTED) {
+                eventType = FailureEvent.EventType.CONNECTION_LOST;
+            } else if (to == SystemState.RETRYING) {
+                eventType = FailureEvent.EventType.RETRY_ATTEMPTED;
+            } else {
+                eventType = FailureEvent.EventType.CONNECTION_ESTABLISHED;
+            }
             
             kafkaEventProducer.emit(FailureEvent.create(
                 eventType,
