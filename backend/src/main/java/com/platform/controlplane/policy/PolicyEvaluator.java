@@ -37,10 +37,12 @@ public class PolicyEvaluator {
     public PolicyEvaluator(
             ActionExecutor actionExecutor,
             SystemStateMachine stateMachine,
-            PolicyRepository policyRepository) {
+            PolicyRepository policyRepository,
+            MetricsRegistry metricsRegistry) {
         this.actionExecutor = actionExecutor;
         this.stateMachine = stateMachine;
         this.policyRepository = policyRepository;
+        this.metricsRegistry = metricsRegistry;
     }
     
     /**
