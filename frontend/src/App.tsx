@@ -5,12 +5,19 @@ import {
     AlertTriangle,
     BarChart3,
     RefreshCw,
+    Shield,
+    Zap,
+    ScrollText,
 } from 'lucide-react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { SystemHealthDashboard } from './pages/SystemHealthDashboard';
 import { TopologyView } from './pages/TopologyView';
 import { FailureTimeline } from './pages/FailureTimeline';
 import { LiveMetrics } from './pages/LiveMetrics';
+import { SystemStatePanel } from './pages/SystemStatePanel';
+import { StateTransitionTimeline } from './pages/StateTransitionTimeline';
+import { PolicyActivityLog } from './pages/PolicyActivityLog';
+import { ChaosControlPanel } from './pages/ChaosControlPanel';
 
 function App() {
     const { isConnected, health, events, requestRefresh } = useWebSocket();
@@ -87,6 +94,33 @@ function App() {
                             <BarChart3 size={20} />
                             Live Metrics
                         </NavLink>
+                        <NavLink
+                            to="/state"
+                            className={({ isActive }) =>
+                                `nav-item ${isActive ? 'active' : ''}`
+                            }
+                        >
+                            <Shield size={20} />
+                            System State
+                        </NavLink>
+                        <NavLink
+                            to="/policies"
+                            className={({ isActive }) =>
+                                `nav-item ${isActive ? 'active' : ''}`
+                            }
+                        >
+                            <ScrollText size={20} />
+                            Policy Activity
+                        </NavLink>
+                        <NavLink
+                            to="/chaos"
+                            className={({ isActive }) =>
+                                `nav-item ${isActive ? 'active' : ''}`
+                            }
+                        >
+                            <Zap size={20} />
+                            Chaos Control
+                        </NavLink>
                     </nav>
 
                     <div style={{ marginTop: 'auto', paddingTop: '2rem' }}>
@@ -118,6 +152,10 @@ function App() {
                             element={<FailureTimeline events={events} />}
                         />
                         <Route path="/metrics" element={<LiveMetrics health={health} />} />
+                        <Route path="/state" element={<SystemStatePanel systemType="mysql" />} />
+                        <Route path="/policies" element={<PolicyActivityLog />} />
+                        <Route path="/chaos" element={<ChaosControlPanel />} />
+                        <Route path="/transitions" element={<StateTransitionTimeline />} />
                     </Routes>
                 </main>
             </div>
