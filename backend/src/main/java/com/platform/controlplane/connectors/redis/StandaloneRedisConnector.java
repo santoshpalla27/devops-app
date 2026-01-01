@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.lettuce.core.RedisClient;
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class StandaloneRedisConnector implements RedisConnector {
     
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     private final AtomicReference<RedisClient> redisClient;
@@ -47,12 +51,16 @@ public class StandaloneRedisConnector implements RedisConnector {
     @Value("${spring.data.redis.timeout:5000ms}")
     private Duration timeout;
     
-    public StandaloneRedisConnector(MetricsRegistry metricsRegistry) {
+    public StandaloneRedisConnector(MetricsRegistry metricsRegistry, SystemStateMachine stateMachine) {
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("redis"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("redis"));
         this.redisClient = new AtomicReference<>();
         this.connection = new AtomicReference<>();
+        
+        // Initialize state machine
+        stateMachine.initialize("redis");
     }
     
     @Override
@@ -61,6 +69,9 @@ public class StandaloneRedisConnector implements RedisConnector {
     public boolean connect() {
         log.info("Attempting to connect to Redis (standalone mode) at {}:{}", host, port);
         long startTime = System.currentTimeMillis();
+        
+        // Transition to CONNECTING state
+        stateMachine.transition("redis", SystemState.CONNECTING, "Initiating connection");
         
         try {
             RedisURI.Builder uriBuilder = RedisURI.builder()
@@ -85,6 +96,11 @@ public class StandaloneRedisConnector implements RedisConnector {
             }
             
             long latency = System.currentTimeMillis() - startTime;
+            
+            // Transition to CONNECTED state
+            stateMachine.transition("redis", SystemState.CONNECTED, "Connection established");
+            stateMachine.updateLatency("redis", latency);
+            
             currentStatus.set(ConnectionStatus.up("redis", latency, 1, 1000));
             metricsRegistry.recordConnectionSuccess("redis");
             metricsRegistry.recordLatency("redis", "connect", latency);
@@ -95,6 +111,10 @@ public class StandaloneRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Failed to connect to Redis: {}", e.getMessage());
+            
+            // Transition to RETRYING state
+            stateMachine.transition("redis", SystemState.RETRYING, "Connection failed: " + e.getMessage());
+            
             currentStatus.set(ConnectionStatus.down("redis", e.getMessage()));
             metricsRegistry.recordConnectionFailure("redis");
             return false;
@@ -104,6 +124,10 @@ public class StandaloneRedisConnector implements RedisConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("Redis connection circuit breaker triggered: {}", e.getMessage());
+        
+        // Transition to CIRCUIT_OPEN state
+        stateMachine.transition("redis", SystemState.CIRCUIT_OPEN, "Circuit breaker opened: " + e.getMessage());
+        
         currentStatus.set(ConnectionStatus.down("redis", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -126,6 +150,13 @@ public class StandaloneRedisConnector implements RedisConnector {
             
             long latency = System.currentTimeMillis() - startTime;
             
+            // Update latency and ensure we're in CONNECTED state
+            SystemStateContext context = stateMachine.getContext("redis");
+            if (context.currentState() != SystemState.CONNECTED) {
+                stateMachine.transition("redis", SystemState.CONNECTED, "Health check passed");
+            }
+            stateMachine.updateLatency("redis", latency);
+            
             // Get memory info for additional metrics
             String info = conn.sync().info("memory");
             
@@ -136,6 +167,13 @@ public class StandaloneRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Redis health check failed: {}", e.getMessage());
+            
+            // Transition to DEGRADED state on health check failure
+            SystemStateContext context = stateMachine.getContext("redis");
+            if (context.currentState() == SystemState.CONNECTED) {
+                stateMachine.transition("redis", SystemState.DEGRADED, "Health check failed: " + e.getMessage());
+            }
+            
             ConnectionStatus status = ConnectionStatus.down("redis", e.getMessage());
             currentStatus.set(status);
             metricsRegistry.recordConnectionFailure("redis");
@@ -224,6 +262,9 @@ public class StandaloneRedisConnector implements RedisConnector {
     @PreDestroy
     public void disconnect() {
         log.info("Disconnecting from Redis");
+        
+        // Transition to DISCONNECTED state
+        stateMachine.transition("redis", SystemState.DISCONNECTED, "Manual disconnect");
         
         StatefulRedisConnection<String, String> conn = connection.getAndSet(null);
         if (conn != null) {
