@@ -183,4 +183,27 @@ public class MetricsRegistry {
         AtomicInteger status = gaugeValues.get(system + ".status");
         return status != null ? status.get() : -1;
     }
+    
+    /**
+     * Record a state transition.
+     */
+    public void recordStateTransition(String system, Object fromState, Object toState) {
+        String from = fromState != null ? fromState.toString() : "null";
+        String to = toState != null ? toState.toString() : "unknown";
+        
+        incrementCounter("controlplane.state.transition", 
+            "system", system, 
+            "from", from, 
+            "to", to);
+        
+        log.debug("Recorded state transition for {}: {} -> {}", system, from, to);
+    }
+    
+    /**
+     * Increment invalid transition counter.
+     */
+    public void incrementInvalidTransitions(String system) {
+        getCounter("controlplane.state.transition.invalid", system).increment();
+    }
 }
+
