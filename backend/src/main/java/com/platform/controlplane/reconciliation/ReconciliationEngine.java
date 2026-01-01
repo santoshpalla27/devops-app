@@ -111,7 +111,7 @@ public class ReconciliationEngine {
             desired.systemType(),
             drift,
             desired.desiredState(),
-            current.getCurrentState(),
+            current.currentState(),
             action
         );
         
@@ -127,22 +127,22 @@ public class ReconciliationEngine {
     
     private Optional<DriftType> detectDrift(DesiredSystemState desired, SystemStateContext current) {
         // State mismatch
-        if (current.getCurrentState() != desired.desiredState()) {
+        if (current.currentState() != desired.desiredState()) {
             return Optional.of(DriftType.STATE_MISMATCH);
         }
         
         // Latency exceeded
-        if (current.getLatencyMs() > desired.maxLatencyMs()) {
+        if (current.latencyMs() > desired.maxLatencyMs()) {
             return Optional.of(DriftType.LATENCY_EXCEEDED);
         }
         
         // Retry exceeded
-        if (current.getRetryCount() > desired.maxRetryCount()) {
+        if (current.retryCount() > desired.maxRetryCount()) {
             return Optional.of(DriftType.RETRY_EXCEEDED);
         }
         
         // Circuit stuck open
-        if (current.getCurrentState() == SystemState.CIRCUIT_OPEN && desired.autoRecover()) {
+        if (current.currentState() == SystemState.CIRCUIT_OPEN && desired.autoRecover()) {
             return Optional.of(DriftType.CIRCUIT_STUCK_OPEN);
         }
         
@@ -160,7 +160,7 @@ public class ReconciliationEngine {
     
     private String handleStateMismatch(DesiredSystemState desired, SystemStateContext current) {
         if (desired.desiredState() == SystemState.CONNECTED && 
-            current.getCurrentState() == SystemState.DISCONNECTED) {
+            current.currentState() == SystemState.DISCONNECTED) {
             log.info("Attempting reconnection for {}", desired.systemType());
             attemptReconnect(desired.systemType());
             return "RECONNECT_ATTEMPTED";
@@ -191,12 +191,10 @@ public class ReconciliationEngine {
         try {
             if (systemType.startsWith("mysql")) {
                 mysqlConnectors.stream()
-                    .filter(c -> c.getSystemType().equals(systemType))
                     .findFirst()
                     .ifPresent(MySQLConnector::connect);
             } else if (systemType.startsWith("redis")) {
                 redisConnectors.stream()
-                    .filter(c -> c.getSystemType().equals(systemType))
                     .findFirst()
                     .ifPresent(RedisConnector::connect);
             }
