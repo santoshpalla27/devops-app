@@ -12,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Fault injector for MySQL systems.
@@ -27,6 +29,11 @@ public class MySQLFaultInjector implements FaultInjector {
     
     // Track active faults
     private final Map<String, ChaosExperiment> activeFaults = new ConcurrentHashMap<>();
+    
+    // Deep chaos state
+    private final AtomicBoolean latencyInjectionActive = new AtomicBoolean(false);
+    private final AtomicInteger injectedLatencyMs = new AtomicInteger(0);
+    private final AtomicBoolean queryHangActive = new AtomicBoolean(false);
     
     @Override
     public boolean injectFault(ChaosExperiment experiment) {
@@ -138,14 +145,21 @@ public class MySQLFaultInjector implements FaultInjector {
     }
     
     private boolean injectLatency(ChaosExperiment experiment) {
-        log.warn("Latency injection not fully implemented for MySQL");
-        // Would require query interceptor - simplified for now
+        log.warn("Injecting REAL latency into MySQL queries - {}ms delay", 2000);
+        latencyInjectionActive.set(true);
+        injectedLatencyMs.set(2000); // 2 second delay
+        
+        // This will be checked before each query in the connector wrapper
+        stateMachine.transition("mysql", SystemState.DEGRADED,
+            "Chaos experiment: artificial latency injection");
         return true;
     }
     
     private boolean recoverLatency() {
         log.info("Recovering from latency injection");
-        return true;
+        latencyInjectionActive.set(false);
+        injectedLatencyMs.set(0);
+        return mysqlConnector.reconnect();
     }
     
     private boolean injectPartialFailure(ChaosExperiment experiment) {
@@ -170,6 +184,39 @@ public class MySQLFaultInjector implements FaultInjector {
     
     private boolean recoverTimeout() {
         log.info("Recovering from timeout");
+        queryHangActive.set(false);
         return true;
+    }
+    
+    /**
+     * Called by connector before executing queries - injects chaos if active.
+     */
+    public void beforeQuery() {
+        if (latencyInjectionActive.get()) {
+            int delayMs = injectedLatencyMs.get();
+            log.debug("Injecting {}ms latency before query", delayMs);
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        if (queryHangActive.get()) {
+            log.warn("Query hang active - blocking query execution");
+            try {
+                Thread.sleep(10000); // 10 second hang
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+    
+    public boolean isLatencyInjectionActive() {
+        return latencyInjectionActive.get();
+    }
+    
+    public int getInjectedLatencyMs() {
+        return injectedLatencyMs.get();
     }
 }

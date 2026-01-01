@@ -1,5 +1,7 @@
 package com.platform.controlplane.connectors.kafka;
 
+import com.platform.controlplane.contract.ContractRegistry;
+import com.platform.controlplane.contract.ContractViolation;
 import com.platform.controlplane.model.FailureEvent;
 import com.platform.controlplane.observability.MetricsRegistry;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -24,6 +26,7 @@ public class KafkaEventProducer {
     
     private final KafkaTemplate<String, FailureEvent> kafkaTemplate;
     private final MetricsRegistry metricsRegistry;
+    private final ContractRegistry contractRegistry;
     private final ConcurrentLinkedQueue<FailureEvent> eventQueue;
     private final AtomicBoolean isKafkaAvailable;
     
@@ -32,9 +35,11 @@ public class KafkaEventProducer {
     
     public KafkaEventProducer(
             KafkaTemplate<String, FailureEvent> kafkaTemplate,
-            MetricsRegistry metricsRegistry) {
+            MetricsRegistry metricsRegistry,
+            ContractRegistry contractRegistry) {
         this.kafkaTemplate = kafkaTemplate;
         this.metricsRegistry = metricsRegistry;
+        this.contractRegistry = contractRegistry;
         this.eventQueue = new ConcurrentLinkedQueue<>();
         this.isKafkaAvailable = new AtomicBoolean(true);
         log.info("Kafka event producer initialized");
@@ -72,7 +77,18 @@ public class KafkaEventProducer {
         log.warn("Kafka circuit breaker open, queuing event: {}", event.eventId());
         eventQueue.offer(event);
         metricsRegistry.incrementCounter("kafka.events.queued");
+        metricsRegistry.incrementCounter("kafka.events.dropped", "reason", "circuit_open");
         isKafkaAvailable.set(false);
+        
+        // Record contract violation - events dropped per contract
+        contractRegistry.recordViolation(
+            ContractViolation.create(
+                "kafka-events",
+                "EVENT_DROPPED",
+                String.format("Event %s dropped due to circuit breaker", event.eventId())
+            )
+        );
+        
         return CompletableFuture.completedFuture(false);
     }
     
