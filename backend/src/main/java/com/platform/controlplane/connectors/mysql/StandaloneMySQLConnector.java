@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
@@ -29,17 +32,23 @@ public class StandaloneMySQLConnector implements MySQLConnector {
     
     private final DataSource dataSource;
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     
     @Value("${spring.datasource.url}")
     private String jdbcUrl;
     
-    public StandaloneMySQLConnector(DataSource dataSource, MetricsRegistry metricsRegistry) {
+    public StandaloneMySQLConnector(DataSource dataSource, MetricsRegistry metricsRegistry,
+                                      SystemStateMachine stateMachine) {
         this.dataSource = dataSource;
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("mysql"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("mysql"));
+        
+        // Initialize state machine
+        stateMachine.initialize("mysql");
     }
     
     @Override
@@ -49,9 +58,17 @@ public class StandaloneMySQLConnector implements MySQLConnector {
         log.info("Attempting to connect to MySQL (standalone mode)");
         long startTime = System.currentTimeMillis();
         
+        // Transition to CONNECTING state
+        stateMachine.transition("mysql", SystemState.CONNECTING, "Initiating connection");
+        
         try (Connection conn = dataSource.getConnection()) {
             if (conn.isValid(5)) {
                 long latency = System.currentTimeMillis() - startTime;
+                
+                // Transition to CONNECTED state
+                stateMachine.transition("mysql", SystemState.CONNECTED, "Connection established");
+                stateMachine.updateLatency("mysql", latency);
+                
                 currentStatus.set(ConnectionStatus.up("mysql", latency, 1, 20));
                 metricsRegistry.recordConnectionSuccess("mysql");
                 metricsRegistry.recordLatency("mysql", "connect", latency);
@@ -60,6 +77,10 @@ public class StandaloneMySQLConnector implements MySQLConnector {
             }
         } catch (Exception e) {
             log.error("Failed to connect to MySQL: {}", e.getMessage());
+            
+            // Transition to RETRYING state (will be handled by Resilience4j)
+            stateMachine.transition("mysql", SystemState.RETRYING, "Connection failed: " + e.getMessage());
+            
             currentStatus.set(ConnectionStatus.down("mysql", e.getMessage()));
             metricsRegistry.recordConnectionFailure("mysql");
         }
@@ -69,6 +90,10 @@ public class StandaloneMySQLConnector implements MySQLConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("MySQL connection circuit breaker triggered: {}", e.getMessage());
+        
+        // Transition to CIRCUIT_OPEN state
+        stateMachine.transition("mysql", SystemState.CIRCUIT_OPEN, "Circuit breaker opened: " + e.getMessage());
+        
         currentStatus.set(ConnectionStatus.down("mysql", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -84,6 +109,14 @@ public class StandaloneMySQLConnector implements MySQLConnector {
             
             if (rs.next()) {
                 long latency = System.currentTimeMillis() - startTime;
+                
+                // Update latency and ensure we're in CONNECTED state
+                SystemStateContext context = stateMachine.getContext("mysql");
+                if (context.currentState() != SystemState.CONNECTED) {
+                    stateMachine.transition("mysql", SystemState.CONNECTED, "Health check passed");
+                }
+                stateMachine.updateLatency("mysql", latency);
+                
                 ConnectionStatus status = ConnectionStatus.up("mysql", latency, 
                     getActiveConnections(), getMaxConnections());
                 currentStatus.set(status);
@@ -92,6 +125,13 @@ public class StandaloneMySQLConnector implements MySQLConnector {
             }
         } catch (Exception e) {
             log.error("MySQL health check failed: {}", e.getMessage());
+            
+            // Transition to DEGRADED state on health check failure
+            SystemStateContext context = stateMachine.getContext("mysql");
+            if (context.currentState() == SystemState.CONNECTED) {
+                stateMachine.transition("mysql", SystemState.DEGRADED, "Health check failed: " + e.getMessage());
+            }
+            
             ConnectionStatus status = ConnectionStatus.down("mysql", e.getMessage());
             currentStatus.set(status);
             metricsRegistry.recordConnectionFailure("mysql");
@@ -199,6 +239,10 @@ public class StandaloneMySQLConnector implements MySQLConnector {
     @Override
     public void disconnect() {
         log.info("Disconnecting from MySQL");
+        
+        // Transition to DISCONNECTED state
+        stateMachine.transition("mysql", SystemState.DISCONNECTED, "Manual disconnect");
+        
         currentStatus.set(ConnectionStatus.unknown("mysql"));
     }
     
