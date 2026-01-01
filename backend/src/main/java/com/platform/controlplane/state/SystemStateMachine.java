@@ -4,6 +4,7 @@ import com.platform.controlplane.connectors.kafka.KafkaEventProducer;
 import com.platform.controlplane.model.FailureEvent;
 import com.platform.controlplane.observability.MetricsRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -22,6 +23,9 @@ public class SystemStateMachine {
     private final KafkaEventProducer kafkaEventProducer;
     private final MetricsRegistry metricsRegistry;
     
+    // Lazy to avoid circular dependency
+    private com.platform.controlplane.policy.PolicyEvaluator policyEvaluator;
+    
     // Valid state transitions (from -> to)
     private static final Map<SystemState, Set<SystemState>> ALLOWED_TRANSITIONS = Map.of(
         SystemState.INIT, Set.of(SystemState.CONNECTING),
@@ -37,6 +41,14 @@ public class SystemStateMachine {
     public SystemStateMachine(KafkaEventProducer kafkaEventProducer, MetricsRegistry metricsRegistry) {
         this.kafkaEventProducer = kafkaEventProducer;
         this.metricsRegistry = metricsRegistry;
+    }
+    
+    /**
+     * Set policy evaluator (lazy injection to avoid circular dependency).
+     */
+    @Lazy
+    public void setPolicyEvaluator(com.platform.controlplane.policy.PolicyEvaluator policyEvaluator) {
+        this.policyEvaluator = policyEvaluator;
     }
     
     /**
@@ -90,7 +102,23 @@ public class SystemStateMachine {
         // Emit Kafka event
         emitStateChangeEvent(systemType, current.currentState(), targetState, reason);
         
+        // Trigger policy evaluation (if configured)
+        triggerPolicyEvaluation(systemType);
+        
         return newContext;
+    }
+    
+    /**
+     * Trigger policy evaluation for a system (if policy evaluator is configured).
+     */
+    private void triggerPolicyEvaluation(String systemType) {
+        if (policyEvaluator != null) {
+            try {
+                policyEvaluator.evaluateForSystem(systemType);
+            } catch (Exception e) {
+                log.error("Policy evaluation failed for {}: {}", systemType, e.getMessage());
+            }
+        }
     }
     
     /**
