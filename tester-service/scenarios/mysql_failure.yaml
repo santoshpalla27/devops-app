@@ -1,0 +1,34 @@
+name: mysql_connection_failure
+description: Validates MySQL connection failure detection and automatic recovery
+timeout: 120
+
+preconditions:
+  - mysql.state == CONNECTED
+
+actions:
+  - type: CHAOS
+    system: mysql
+    fault: CONNECTION_LOSS
+    duration: 60
+  
+  - type: WAIT
+    duration: 10s
+
+expectations:
+  states:
+    - system: mysql
+      final_state: CONNECTED
+  
+  policies:
+    - policy_id: mysql-auto-recover
+      should_fire: true
+  
+  events:
+    - type: CONNECTION_LOST
+      count: 1
+    - type: CONNECTION_ESTABLISHED
+      count: 1
+
+validation:
+  - recovery_time < 70s
+  - no_illegal_states: true

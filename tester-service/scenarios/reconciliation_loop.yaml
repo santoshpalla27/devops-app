@@ -1,0 +1,39 @@
+name: reconciliation_drift_detection
+description: Validates reconciliation loop drift detection and convergence
+timeout: 90
+
+preconditions:
+  - mysql.state == CONNECTED
+
+actions:
+  - type: REST
+    method: PUT
+    endpoint: /api/reconciliation/desired-states/mysql
+    payload:
+      systemType: mysql
+      desiredState: CONNECTED
+      maxLatencyMs: 500
+      maxRetryCount: 3
+      autoRecover: true
+  
+  - type: CHAOS
+    system: mysql
+    fault: LATENCY_INJECTION
+    duration: 60
+  
+  - type: WAIT
+    duration: 40s
+
+expectations:
+  states:
+    - system: mysql
+      final_state: CONNECTED
+  
+  drift:
+    - type: LATENCY_EXCEEDED
+      detected: true
+    - convergence_action: LATENCY_ACKNOWLEDGED
+
+validation:
+  - drift_detected: true
+  - convergence_successful: true

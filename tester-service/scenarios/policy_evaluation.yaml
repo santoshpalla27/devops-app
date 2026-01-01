@@ -1,0 +1,37 @@
+name: policy_evaluation
+description: Validates policy evaluation and action execution
+timeout: 60
+
+preconditions:
+  - system.healthy == true
+
+actions:
+  - type: REST
+    method: POST
+    endpoint: /api/policies
+    payload:
+      name: test-policy
+      condition: "retry_count > 3"
+      action: ALERT
+      severity: WARNING
+  
+  - type: CHAOS
+    system: redis
+    fault: CONNECTION_LOSS
+    duration: 30
+  
+  - type: WAIT
+    duration: 10s
+
+expectations:
+  policies:
+    - policy_id: test-policy
+      should_fire: true
+  
+  events:
+    - type: POLICY_EXECUTED
+      count: "> 0"
+
+validation:
+  - policy_triggered: true
+  - action_executed: true
