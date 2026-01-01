@@ -205,5 +205,64 @@ public class MetricsRegistry {
     public void incrementInvalidTransitions(String system) {
         getCounter("controlplane.state.transition.invalid", system).increment();
     }
+    
+    /**
+     * Record a chaos experiment started.
+     */
+    public void recordChaosExperimentStarted(String systemType, String faultType) {
+        incrementCounter("controlplane.chaos.experiments.total", 
+            "system", systemType, "fault_type", faultType);
+        log.debug("Recorded chaos experiment started: {} on {}", faultType, systemType);
+    }
+    
+    /**
+     * Record a chaos experiment completed.
+     */
+    public void recordChaosExperimentCompleted(String systemType, String faultType, boolean success) {
+        incrementCounter("controlplane.chaos.experiments.completed", 
+            "system", systemType, "fault_type", faultType, "success", String.valueOf(success));
+        log.debug("Recorded chaos experiment completed: {} on {} (success: {})", 
+            faultType, systemType, success);
+    }
+    
+    /**
+     * Record a fault injection.
+     */
+    public void recordFaultInjected(String systemType, String faultType) {
+        incrementCounter("controlplane.chaos.faults.injected", 
+            "system", systemType, "type", faultType);
+        log.debug("Recorded fault injected: {} on {}", faultType, systemType);
+    }
+    
+    /**
+     * Record a fault recovery.
+     */
+    public void recordFaultRecovered(String systemType, String faultType, long durationMs) {
+        incrementCounter("controlplane.chaos.faults.recovered", 
+            "system", systemType, "type", faultType);
+        recordLatency(systemType, "fault_duration", durationMs);
+        log.debug("Recorded fault recovered: {} on {} after {}ms", 
+            faultType, systemType, durationMs);
+    }
+    
+    /**
+     * Record a policy execution.
+     */
+    public void recordPolicyExecution(String policyName, String systemType, String action, boolean success) {
+        incrementCounter("controlplane.policy.executions.total", 
+            "policy", policyName, "system", systemType, "action", action, "success", String.valueOf(success));
+        log.debug("Recorded policy execution: {} on {} (action: {}, success: {})", 
+            policyName, systemType, action, success);
+    }
+    
+    /**
+     * Record a policy-triggered state transition.
+     */
+    public void recordPolicyTriggeredTransition(String systemType, String fromState, String toState) {
+        incrementCounter("controlplane.state.transitions.policy_triggered", 
+            "system", systemType, "from", fromState, "to", toState);
+        log.debug("Recorded policy-triggered transition: {} -> {} on {}", 
+            fromState, toState, systemType);
+    }
 }
 

@@ -1,7 +1,9 @@
 package com.platform.controlplane.chaos;
 
+import com.platform.controlplane.observability.MetricsRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -19,6 +21,7 @@ public class ChaosService {
     
     private final ChaosRepository chaosRepository;
     private final Map<String, FaultInjector> faultInjectors;
+    private final MetricsRegistry metricsRegistry;
     
     /**
      * Start a chaos experiment.
@@ -37,8 +40,21 @@ public class ChaosService {
         experiment.setStatus(ChaosExperiment.ExperimentStatus.RUNNING);
         experiment.setStartedAt(Instant.now());
         
+        // Set MDC for logging correlation
+        MDC.put("experimentId", experiment.getId());
+        MDC.put("systemType", experiment.getSystemType());
+        
+        // Record metrics
+        metricsRegistry.recordChaosExperimentStarted(experiment.getSystemType(), 
+            experiment.getFaultType().toString());
+        
         // Inject fault
         boolean success = injector.injectFault(experiment);
+        
+        if (success) {
+            metricsRegistry.recordFaultInjected(experiment.getSystemType(), 
+                experiment.getFaultType().toString());
+        }
         
         if (!success) {
             experiment.setStatus(ChaosExperiment.ExperimentStatus.FAILED);
@@ -48,6 +64,8 @@ public class ChaosService {
         
         // Save experiment
         chaosRepository.save(experiment);
+        
+        MDC.clear();
         
         log.info("Chaos experiment {} {}", experiment.getName(), 
             success ? "started successfully" : "failed");
@@ -69,6 +87,13 @@ public class ChaosService {
             return experiment;
         }
         
+        // Set MDC
+        MDC.put("experimentId", experimentId);
+        MDC.put("systemType", experiment.getSystemType());
+        
+ long startTime = experiment.getStartedAt() != null ? 
+            experiment.getStartedAt().toEpochMilli() : System.currentTimeMillis();
+        
         // Get injector
         FaultInjector injector = getFaultInjector(experiment.getSystemType());
         if (injector == null) {
@@ -79,6 +104,12 @@ public class ChaosService {
             // Recover from fault
             boolean success = injector.recoverFromFault(experimentId);
             
+            if (success) {
+                long duration = System.currentTimeMillis() - startTime;
+                metricsRegistry.recordFaultRecovered(experiment.getSystemType(), 
+                    experiment.getFaultType().toString(), duration);
+            }
+            
             experiment.setStatus(success ? 
                 ChaosExperiment.ExperimentStatus.COMPLETED : 
                 ChaosExperiment.ExperimentStatus.FAILED);
@@ -86,7 +117,15 @@ public class ChaosService {
         }
         
         experiment.setEndedAt(Instant.now());
+        
+        // Record metrics
+        metricsRegistry.recordChaosExperimentCompleted(experiment.getSystemType(), 
+            experiment.getFaultType().toString(), 
+            experiment.getStatus() == ChaosExperiment.ExperimentStatus.COMPLETED);
+        
         chaosRepository.save(experiment);
+        
+        MDC.clear();
         
         log.info("Chaos experiment {} stopped with status: {}", 
             experimentId, experiment.getStatus());

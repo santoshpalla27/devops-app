@@ -1,8 +1,10 @@
 package com.platform.controlplane.policy;
 
+import com.platform.controlplane.observability.MetricsRegistry;
 import com.platform.controlplane.state.SystemStateContext;
 import com.platform.controlplane.state.SystemStateMachine;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -23,6 +25,7 @@ public class PolicyEvaluator {
     private final ActionExecutor actionExecutor;
     private final SystemStateMachine stateMachine;
     private final PolicyRepository policyRepository;
+    private final MetricsRegistry metricsRegistry;
     
     // Track last execution time per policy to enforce cooldowns
     private final Map<String, Instant> lastExecutionTimes = new ConcurrentHashMap<>();
@@ -69,13 +72,25 @@ public class PolicyEvaluator {
             
             // Execute action
             log.info("Policy '{}' triggered for system: {}", policy.getName(), systemType);
+            
+            // Set MDC for logging correlation
+            MDC.put("policyId", policy.getId());
+            MDC.put("policyName", policy.getName());
+            MDC.put("systemType", systemType);
+            
             PolicyExecutionRecord record = actionExecutor.execute(policy, systemType);
             
-            // Update last execution time
+            // Record metrics
+            metricsRegistry.recordPolicyExecution(policy.getName(), systemType, 
+                policy.getAction().toString(), record.isSuccess());
+            
+           // Update last execution time
             lastExecutionTimes.put(policy.getId(), Instant.now());
             
             // Add to history
             addToHistory(record);
+            
+            MDC.clear();
             
             executions.add(record);
         }
