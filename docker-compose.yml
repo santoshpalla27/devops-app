@@ -70,12 +70,17 @@ services:
         condition: service_healthy
     networks:
       - controlplane-net
-    # Run tests on startup, then exit
-    # Or keep container running for manual test execution
-    # command: [ "ci", "--scenarios-dir", "scenarios" ]
-    # Uncomment below to keep container running for manual tests
-    command: [ "tail", "-f", "/dev/null" ]
-    # ==================== MySQL (Primary-Replica) ====================
+    # Run all tests on startup, then keep container running for manual tests
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        echo "🚀 Running initial test suite..."
+        python main.py ci --scenarios-dir scenarios || echo "⚠️  Some tests failed, but keeping container running"
+        echo "✅ Tests complete. Container staying alive for manual testing."
+        echo "Run: docker exec -it controlplane-tester python main.py run --scenario scenarios/mysql_failure.yaml"
+        tail -f /dev/null
+
+  # ==================== MySQL (Primary-Replica) ====================
 
   mysql-primary:
     image: mysql:8.0
