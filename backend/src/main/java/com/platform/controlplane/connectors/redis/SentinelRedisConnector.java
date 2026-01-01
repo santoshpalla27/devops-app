@@ -4,6 +4,9 @@ import com.platform.controlplane.model.ConnectionStatus;
 import com.platform.controlplane.model.TopologyInfo;
 import com.platform.controlplane.model.TopologyInfo.NodeInfo;
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.state.SystemState;
+import com.platform.controlplane.state.SystemStateContext;
+import com.platform.controlplane.state.SystemStateMachine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.lettuce.core.RedisClient;
@@ -34,6 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SentinelRedisConnector implements RedisConnector {
     
     private final MetricsRegistry metricsRegistry;
+    private final SystemStateMachine stateMachine;
     private final AtomicReference<ConnectionStatus> currentStatus;
     private final AtomicReference<TopologyInfo> currentTopology;
     private final AtomicReference<RedisClient> redisClient;
@@ -52,13 +56,16 @@ public class SentinelRedisConnector implements RedisConnector {
     @Value("${spring.data.redis.timeout:5000ms}")
     private Duration timeout;
     
-    public SentinelRedisConnector(MetricsRegistry metricsRegistry) {
+    public SentinelRedisConnector(MetricsRegistry metricsRegistry, SystemStateMachine stateMachine) {
         this.metricsRegistry = metricsRegistry;
+        this.stateMachine = stateMachine;
         this.currentStatus = new AtomicReference<>(ConnectionStatus.unknown("redis"));
         this.currentTopology = new AtomicReference<>(TopologyInfo.unknown("redis"));
         this.redisClient = new AtomicReference<>();
         this.masterConnection = new AtomicReference<>();
         this.currentMaster = new AtomicReference<>();
+        
+        stateMachine.initialize("redis");
     }
     
     @Override
@@ -67,6 +74,8 @@ public class SentinelRedisConnector implements RedisConnector {
     public boolean connect() {
         log.info("Attempting to connect to Redis via Sentinel");
         long startTime = System.currentTimeMillis();
+        
+        stateMachine.transition("redis", SystemState.CONNECTING, "Initiating Sentinel connection");
         
         try {
             RedisURI.Builder uriBuilder = RedisURI.builder()
@@ -99,6 +108,10 @@ public class SentinelRedisConnector implements RedisConnector {
             }
             
             long latency = System.currentTimeMillis() - startTime;
+            
+            stateMachine.transition("redis", SystemState.CONNECTED, "Connected via Sentinel");
+            stateMachine.updateLatency("redis", latency);
+            
             currentStatus.set(ConnectionStatus.up("redis", latency, 1, 1000));
             metricsRegistry.recordConnectionSuccess("redis");
             metricsRegistry.recordLatency("redis", "connect", latency);
@@ -109,6 +122,9 @@ public class SentinelRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Failed to connect to Redis via Sentinel: {}", e.getMessage());
+            
+            stateMachine.transition("redis", SystemState.RETRYING, "Connection failed: " + e.getMessage());
+            
             currentStatus.set(ConnectionStatus.down("redis", e.getMessage()));
             metricsRegistry.recordConnectionFailure("redis");
             return false;
@@ -118,6 +134,9 @@ public class SentinelRedisConnector implements RedisConnector {
     @SuppressWarnings("unused")
     private boolean connectFallback(Exception e) {
         log.warn("Redis Sentinel connection circuit breaker triggered: {}", e.getMessage());
+        
+        stateMachine.transition("redis", SystemState.CIRCUIT_OPEN, "Circuit breaker opened");
+        
         currentStatus.set(ConnectionStatus.down("redis", "Circuit breaker open: " + e.getMessage()));
         return false;
     }
@@ -164,6 +183,12 @@ public class SentinelRedisConnector implements RedisConnector {
             
         } catch (Exception e) {
             log.error("Redis Sentinel health check failed: {}", e.getMessage());
+            
+            SystemStateContext context = stateMachine.getContext("redis");
+            if (context.currentState() == SystemState.CONNECTED) {
+                stateMachine.transition("redis", SystemState.DEGRADED, "Health check failed");
+            }
+            
             ConnectionStatus status = ConnectionStatus.down("redis", e.getMessage());
             currentStatus.set(status);
             metricsRegistry.recordConnectionFailure("redis");
@@ -297,6 +322,8 @@ public class SentinelRedisConnector implements RedisConnector {
     @PreDestroy
     public void disconnect() {
         log.info("Disconnecting from Redis Sentinel");
+        
+        stateMachine.transition("redis", SystemState.DISCONNECTED, "Manual disconnect");
         
         StatefulRedisConnection<String, String> conn = masterConnection.getAndSet(null);
         if (conn != null) {
