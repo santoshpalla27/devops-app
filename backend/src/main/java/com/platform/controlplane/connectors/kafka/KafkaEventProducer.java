@@ -2,8 +2,6 @@ package com.platform.controlplane.connectors.kafka;
 
 import com.platform.controlplane.model.FailureEvent;
 import com.platform.controlplane.observability.MetricsRegistry;
-import com.platform.controlplane.state.SystemState;
-import com.platform.controlplane.state.SystemStateMachine;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +24,6 @@ public class KafkaEventProducer {
     
     private final KafkaTemplate<String, FailureEvent> kafkaTemplate;
     private final MetricsRegistry metricsRegistry;
-    private final SystemStateMachine stateMachine;
     private final ConcurrentLinkedQueue<FailureEvent> eventQueue;
     private final AtomicBoolean isKafkaAvailable;
     
@@ -35,15 +32,12 @@ public class KafkaEventProducer {
     
     public KafkaEventProducer(
             KafkaTemplate<String, FailureEvent> kafkaTemplate,
-            MetricsRegistry metricsRegistry,
-            SystemStateMachine stateMachine) {
+            MetricsRegistry metricsRegistry) {
         this.kafkaTemplate = kafkaTemplate;
         this.metricsRegistry = metricsRegistry;
-        this.stateMachine = stateMachine;
         this.eventQueue = new ConcurrentLinkedQueue<>();
         this.isKafkaAvailable = new AtomicBoolean(true);
-        stateMachine.initialize("kafka");
-        stateMachine.transition("kafka", SystemState.CONNECTED, "Kafka producer initialized");
+        log.info("Kafka event producer initialized");
     }
     
     /**
@@ -79,7 +73,6 @@ public class KafkaEventProducer {
         eventQueue.offer(event);
         metricsRegistry.incrementCounter("kafka.events.queued");
         isKafkaAvailable.set(false);
-        stateMachine.transition("kafka", SystemState.CIRCUIT_OPEN, "Kafka unavailable, queuing events");
         return CompletableFuture.completedFuture(false);
     }
     
