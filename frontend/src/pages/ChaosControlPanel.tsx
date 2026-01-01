@@ -28,7 +28,7 @@ export function ChaosControlPanel() {
 
     const fetchExperiments = async () => {
         try {
-            const response = await fetch('http://localhost:8080/api/chaos/experiments?activeOnly=true');
+            const response = await fetch('/api/chaos/experiments?activeOnly=true');
             if (response.ok) {
                 const data = await response.json();
                 setExperiments(data);
@@ -43,7 +43,7 @@ export function ChaosControlPanel() {
 
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8080/api/chaos/inject', {
+            const response = await fetch('/api/chaos/inject', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ systemType, faultType, durationSeconds: duration }),
@@ -61,7 +61,7 @@ export function ChaosControlPanel() {
 
     const handleStopExperiment = async (id: string) => {
         try {
-            await fetch(`http://localhost:8080/api/chaos/experiments/${id}`, {
+            await fetch(`/api/chaos/experiments/${id}`, {
                 method: 'DELETE',
             });
             await fetchExperiments();

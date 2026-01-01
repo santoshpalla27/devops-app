@@ -15,7 +15,7 @@ export function PolicyActivityLog() {
 
     const fetchExecutions = async () => {
         try {
-            const response = await fetch('http://localhost:8080/api/policies/executions?limit=50');
+            const response = await fetch('/api/policies/executions?limit=50');
             if (response.ok) {
                 const data = await response.json();
                 setExecutions(data);

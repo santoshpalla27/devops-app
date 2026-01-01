@@ -40,7 +40,7 @@ export function SystemStatePanel({ systemType }: SystemStatePanelProps) {
 
     const fetchState = async () => {
         try {
-            const response = await fetch(`http://localhost:8080/api/policies/debug/state/${systemType}`);
+            const response = await fetch(`/api/policies/debug/state/${systemType}`);
             if (response.ok) {
                 const data = await response.json();
                 setState(data);
