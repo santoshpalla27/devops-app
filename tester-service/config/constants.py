@@ -1,12 +1,14 @@
+import os
+
 # Base URL for the control plane API
-CONTROL_PLANE_URL = "http://localhost:8080"
+CONTROL_PLANE_URL = os.getenv("CONTROL_PLANE_URL", "http://localhost:8080")
 
 # Kafka configuration
-KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 KAFKA_TOPIC = "controlplane-events"
 
 # Prometheus configuration
-PROMETHEUS_URL = "http://localhost:9090"
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
 
 # Timeouts
 DEFAULT_TIMEOUT = 120  # seconds
