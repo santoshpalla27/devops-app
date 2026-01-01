@@ -159,12 +159,21 @@ public class SystemStateMachine {
      */
     private void emitStateChangeEvent(String systemType, SystemState from, SystemState to, String reason) {
         try {
-            kafkaEventProducer.emitEvent(FailureEvent.builder()
-                .system(systemType)
-                .eventType("STATE_TRANSITION_" + from + "_TO_" + to)
-                .message(String.format("State transition: %s -> %s (reason: %s)", from, to, reason))
-                .retryCount(0)
-                .build());
+            // Determine event type based on state transition
+            FailureEvent.EventType eventType = switch (to) {
+                case CIRCUIT_OPEN -> FailureEvent.EventType.CIRCUIT_BREAKER_OPENED;
+                case CIRCUIT_OPEN when from == SystemState.RECOVERING -> FailureEvent.EventType.CIRCUIT_BREAKER_CLOSED;
+                case CONNECTED -> FailureEvent.EventType.CONNECTION_ESTABLISHED;
+                case DISCONNECTED -> FailureEvent.EventType.CONNECTION_LOST;
+                case RETRYING -> FailureEvent.EventType.RETRY_ATTEMPTED;
+                default -> FailureEvent.EventType.CONNECTION_ESTABLISHED;
+            };
+            
+            kafkaEventProducer.emit(FailureEvent.create(
+                eventType,
+                systemType,
+                String.format("State transition: %s -> %s (reason: %s)", from, to, reason)
+            ));
         } catch (Exception e) {
             log.error("Failed to emit state change event for {}", systemType, e);
         }

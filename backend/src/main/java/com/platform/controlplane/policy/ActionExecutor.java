@@ -92,7 +92,7 @@ public class ActionExecutor {
         
         if (result) {
             kafkaProducer.emit(FailureEvent.create(
-                FailureEvent.EventType.SYSTEM_RECONNECT,
+                FailureEvent.EventType.RECONNECTION_SUCCESSFUL,
                 systemType,
                 "Policy triggered reconnection"
             ));
@@ -125,7 +125,7 @@ public class ActionExecutor {
         log.info("Executing EMIT_ALERT for {}", systemType);
         
         kafkaProducer.emit(FailureEvent.create(
-            FailureEvent.EventType.SYSTEM_ALERT,
+            FailureEvent.EventType.RETRY_EXHAUSTED,
             systemType,
             String.format("Policy '%s' triggered alert: %s", 
                 policy.getName(), policy.getCondition().describe())
