@@ -199,6 +199,8 @@ jobs:
           username: ec2-user
           key: ${{ secrets.SSH_IP }}
           script: |
+            rm -rf *
+            git clone https://github.com/santoshpalla27/devops-app.git
             cd devops-app
             git pull origin main
             # Stop and remove containers, networks, volumes
