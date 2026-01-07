@@ -28,7 +28,9 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
+          script_stop: true  # FAIL if any command fails
           script: |
+            set -e  # Exit on any error
             echo "=== Initial Deployment Started ==="
             
             # Clean up old deployment
@@ -48,6 +50,11 @@ jobs:
             
             # Build and start all services
             docker compose build --no-cache
+            if [ $? -ne 0 ]; then
+              echo "BUILD FAILED!"
+              exit 1
+            fi
+            
             docker compose up -d
             
             # Create deployment marker
@@ -62,10 +69,20 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
+          script_stop: true
           script: |
+            set -e
             # Wait for services to be healthy
             sleep 10
             docker ps
             
             # Check if key containers are running
-            docker ps | grep -E "(frontend|backend)" && echo "✓ Services running" || echo "✗ Services not found"
+            if ! docker ps | grep -q "frontend"; then
+              echo "✗ Frontend not running"
+              exit 1
+            fi
+            if ! docker ps | grep -q "backend"; then
+              echo "✗ Backend not running"
+              exit 1
+            fi
+            echo "✓ All services running"

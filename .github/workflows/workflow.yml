@@ -96,7 +96,9 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
+          script_stop: true
           script: |
+            set -e
             cd ~/devops-app
             git pull origin main
             
@@ -144,7 +146,9 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_KEY }}
+          script_stop: true
           script: |
+            set -e
             cd ~/devops-app
             git pull origin main
             
