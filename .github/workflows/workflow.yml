@@ -1,0 +1,216 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Prevent concurrent deployments - only one workflow run at a time
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel in-progress, queue instead
+
+jobs:
+  init:
+    name: Init
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+    
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_IP }}
+          script: |
+            docker compose up -d   
+
+
+  # Detect which paths changed
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      main-dir: ${{ steps.filter.outputs.main-dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            backend:
+              - 'backend/**'
+            main-dir:
+              - '**'           # All files in root
+              - '!frontend/'  # Exclude frontend folder
+              - '!backend/'   # Exclude backend folder
+
+
+  # Frontend build - only if frontend changed
+  build-frontend:
+    name: Build Frontend
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  
+  # Deploy Frontend
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: build-frontend
+    if: ${{ needs.build-frontend.result == 'success' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_IP }}
+          script: |
+            # Stop frontend and remove volumes
+            docker compose down frontend --volumes --remove-orphans
+            
+            # Clean frontend-related images and cache
+            docker image prune -af --filter "label=service=frontend"
+            docker builder prune -af
+            
+            # Rebuild and start frontend
+            docker compose build --no-cache frontend
+            docker compose up -d frontend
+            
+            # Verify
+            docker ps | grep frontend
+
+
+
+  # Backend build - only if backend changed
+  build-backend:
+    name: Build Backend
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+  # Deploy Backend
+  deploy-backend:
+    name: Deploy Backend
+    needs: build-backend
+    if: ${{ needs.build-backend.result == 'success' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_IP }}
+          script: |
+            # Stop backend and remove volumes
+            docker compose down backend --volumes --remove-orphans
+
+            # Clean backend-related images and cache
+            docker image prune -af --filter "label=service=backend"
+            docker builder prune -af
+            
+            # Rebuild and start backend
+            docker compose build --no-cache backend 
+            docker compose up -d backend
+            
+            # Verify
+            docker ps | grep backend 
+
+
+
+  # Deploy Main
+  deploy-main:
+    name: Deploy Main
+    needs: changes
+    if: ${{ needs.changes.outputs.main-dir == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_IP }}
+          script: |
+            # Stop and remove containers, networks, volumes
+            docker compose down -v --remove-orphans
+            
+            # Clean up Docker cache and unused resources
+            docker system prune -af --volumes
+            docker builder prune -af
+            
+            # Pull latest images and rebuild
+            docker compose pull
+            docker compose build --no-cache --pull
+            
+            # Start services
+            docker compose up -d
+            
+            # Show running containers
+            docker ps
+
+
+ 
