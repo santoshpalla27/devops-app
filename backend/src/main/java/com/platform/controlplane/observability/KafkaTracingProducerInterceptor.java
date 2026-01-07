@@ -34,7 +34,8 @@ public class KafkaTracingProducerInterceptor<K, V> implements ProducerIntercepto
         if (tracerObj instanceof Tracer) {
             this.tracer = (Tracer) tracerObj;
         }
-        this.serviceName = (String) configs.getOrDefault("otel.service.name", "controlplane");
+        Object serviceNameObj = configs.get("otel.service.name");
+        this.serviceName = serviceNameObj != null ? serviceNameObj.toString() : "controlplane";
     }
     
     @Override

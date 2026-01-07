@@ -51,6 +51,24 @@ public class KafkaEventProducer {
     }
     
     /**
+     * Check if Kafka is available (outbox pattern always returns true as we persist locally).
+     */
+    public boolean isKafkaAvailable() {
+        // With outbox pattern, we always accept events (they're persisted to DB)
+        // The dispatcher will handle Kafka availability
+        return true;
+    }
+    
+    /**
+     * Process queued events (no-op - handled by EventDispatcherService).
+     */
+    public void processQueuedEvents() {
+        // Events are processed by EventDispatcherService on a schedule
+        // This method exists for compatibility but doesn't need to do anything
+        log.debug("processQueuedEvents called - handled by EventDispatcherService");
+    }
+    
+    /**
      * Emit a failure event.
      * Event is persisted to outbox for reliable delivery.
      */

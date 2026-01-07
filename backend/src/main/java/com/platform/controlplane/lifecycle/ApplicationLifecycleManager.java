@@ -48,9 +48,7 @@ public class ApplicationLifecycleManager {
             log.info("Application marked READY");
             
             // Publish readiness
-            eventPublisher.publishEvent(
-                AvailabilityChangeEvent.publish(eventPublisher, ReadinessState.ACCEPTING_TRAFFIC)
-            );
+            AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.ACCEPTING_TRAFFIC);
         }
     }
     
@@ -64,9 +62,7 @@ public class ApplicationLifecycleManager {
             log.info("Application entering DRAINING phase (was {})", previous);
             
             // Publish not ready for new traffic
-            eventPublisher.publishEvent(
-                AvailabilityChangeEvent.publish(eventPublisher, ReadinessState.REFUSING_TRAFFIC)
-            );
+            AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.REFUSING_TRAFFIC);
         }
     }
     
@@ -79,9 +75,7 @@ public class ApplicationLifecycleManager {
         log.info("Application marked STOPPED (was {})", previous);
         
         // Publish broken liveness
-        eventPublisher.publishEvent(
-            AvailabilityChangeEvent.publish(eventPublisher, LivenessState.BROKEN)
-        );
+        AvailabilityChangeEvent.publish(eventPublisher, this, LivenessState.BROKEN);
     }
     
     /**

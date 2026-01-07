@@ -464,6 +464,9 @@ public class GlobalExceptionHandler {
     }
     
     private HttpStatus mapErrorCodeToStatus(ErrorCode errorCode) {
+        if (errorCode == null) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
         return switch (errorCode) {
             case RESOURCE_NOT_FOUND, POLICY_NOT_FOUND, EXPERIMENT_NOT_FOUND, SYSTEM_NOT_FOUND -> 
                 HttpStatus.NOT_FOUND;

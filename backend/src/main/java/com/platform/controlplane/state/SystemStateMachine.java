@@ -52,6 +52,15 @@ public class SystemStateMachine {
     }
     
     /**
+     * Set policy evaluator (lazy injection to avoid circular dependency).
+     * @deprecated Use setPolicyScheduler instead
+     */
+    @Lazy
+    public void setPolicyEvaluator(com.platform.controlplane.policy.PolicyEvaluator policyEvaluator) {
+        log.debug("setPolicyEvaluator called - policy evaluation handled via PolicySchedulerService");
+    }
+    
+    /**
      * Initialize a system with INIT state.
      */
     public SystemStateContext initialize(String systemType) {
