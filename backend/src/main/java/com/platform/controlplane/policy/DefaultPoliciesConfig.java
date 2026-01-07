@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
+
 /**
  * Configuration class that sets up default policies.
  */
@@ -102,13 +104,23 @@ public class DefaultPoliciesConfig {
             .enabled(true)
             .build();
         
-        // Save all policies
-        policyRepository.save(mysqlCircuitOpen);
-        policyRepository.save(redisCircuitOpen);
-        policyRepository.save(degradedAlert);
-        policyRepository.save(circuitRecovery);
-        policyRepository.save(criticalFailures);
+        // Save policies only if they don't already exist
+        List<Policy> defaultPolicies = List.of(
+            mysqlCircuitOpen, redisCircuitOpen, degradedAlert, circuitRecovery, criticalFailures
+        );
         
-        log.info("Default policies initialized: {} policies", policyRepository.count());
+        int created = 0;
+        for (Policy policy : defaultPolicies) {
+            if (policyRepository.findByName(policy.getName()).isEmpty()) {
+                policyRepository.save(policy);
+                created++;
+                log.debug("Created policy: {}", policy.getName());
+            } else {
+                log.debug("Policy already exists: {}", policy.getName());
+            }
+        }
+        
+        log.info("Default policies initialized: {} created, {} total", created, policyRepository.count());
     }
 }
+
