@@ -1,0 +1,119 @@
+{
+    "index_patterns": [
+        "security-events-*"
+    ],
+    "priority": 100,
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "security-ilm",
+            "index.lifecycle.rollover_alias": "security-events",
+            "index.mapping.total_fields.limit": 2000,
+            "index.refresh_interval": "5s"
+        },
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "@timestamp": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis"
+                },
+                "ingest_time": {
+                    "type": "date"
+                },
+                "log": {
+                    "properties": {
+                        "level": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "service": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "environment": {
+                    "type": "keyword"
+                },
+                "event_type": {
+                    "type": "keyword"
+                },
+                "trace_id": {
+                    "type": "keyword"
+                },
+                "span_id": {
+                    "type": "keyword"
+                },
+                "request_id": {
+                    "type": "keyword"
+                },
+                "host": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "actor": {
+                    "type": "keyword"
+                },
+                "client_ip": {
+                    "type": "ip"
+                },
+                "action": {
+                    "type": "keyword"
+                },
+                "resource_type": {
+                    "type": "keyword"
+                },
+                "resource_id": {
+                    "type": "keyword"
+                },
+                "threat_type": {
+                    "type": "keyword"
+                },
+                "blocked": {
+                    "type": "boolean"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "rate_limit_bucket": {
+                    "type": "keyword"
+                },
+                "path": {
+                    "type": "keyword"
+                },
+                "method": {
+                    "type": "keyword"
+                },
+                "user_agent": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
+                        }
+                    }
+                },
+                "message": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "_meta": {
+        "description": "Security events for rate limiting, auth, threats",
+        "version": 1
+    }
+}

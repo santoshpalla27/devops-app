@@ -1,52 +1,104 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     
-    <springProperty scope="context" name="application" source="spring.application.name" defaultValue="devops-control-plane"/>
+    <!-- Properties from application.yml -->
+    <springProperty scope="context" name="SERVICE_NAME" source="otel.service.name" defaultValue="devops-control-plane"/>
+    <springProperty scope="context" name="ENVIRONMENT" source="otel.environment" defaultValue="development"/>
     
-    <!-- Console appender for development -->
+    <!-- JSON encoder for structured logs -->
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Add static fields -->
+            <customFields>
+                {"service":"${SERVICE_NAME}","environment":"${ENVIRONMENT}"}
+            </customFields>
+            
+            <!-- Include MDC fields -->
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>span_id</includeMdcKeyName>
+            <includeMdcKeyName>request_id</includeMdcKeyName>
+            <includeMdcKeyName>chaos_experiment_id</includeMdcKeyName>
+            
+            <!-- Timestamp in RFC3339 format -->
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
+            
+            <!-- Field names -->
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+        </encoder>
+    </appender>
+    
+    <!-- Fallback console for development -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-}] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [trace_id=%X{trace_id:-} span_id=%X{span_id:-}] [req=%X{request_id:-}] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
     
-    <!-- JSON appender for production -->
-    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeMdcKeyName>correlationId</includeMdcKeyName>
-            <includeMdcKeyName>requestPath</includeMdcKeyName>
-            <includeMdcKeyName>requestMethod</includeMdcKeyName>
-            <includeMdcKeyName>system</includeMdcKeyName>
-            <includeMdcKeyName>topology</includeMdcKeyName>
-            <includeMdcKeyName>operation</includeMdcKeyName>
-            <includeMdcKeyName>target</includeMdcKeyName>
-            <customFields>{"application":"${application}"}</customFields>
-            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSZ</timestampPattern>
-        </encoder>
+    <!-- Async wrapper for production -->
+    <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="JSON_CONSOLE"/>
     </appender>
     
-    <!-- Development profile -->
+    <!-- Structured logger outputs (always JSON) -->
+    <logger name="structured" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.chaos" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.policy" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.connector" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.security" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.lifecycle" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.recovery" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    <logger name="structured.http" level="DEBUG" additivity="false">
+        <appender-ref ref="ASYNC_JSON"/>
+    </logger>
+    
+    <!-- Spring profile for development (human-readable) -->
     <springProfile name="dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
+        
         <logger name="com.platform.controlplane" level="DEBUG"/>
+        <logger name="org.springframework.web" level="DEBUG"/>
     </springProfile>
     
-    <!-- Production profile -->
-    <springProfile name="prod">
-        <root level="WARN">
-            <appender-ref ref="JSON"/>
-        </root>
-        <logger name="com.platform.controlplane" level="INFO"/>
-    </springProfile>
-    
-    <!-- Default (if no profile) -->
-    <springProfile name="default">
+    <!-- Spring profile for production (JSON only) -->
+    <springProfile name="prod,production">
         <root level="INFO">
-            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_JSON"/>
         </root>
-        <logger name="com.platform.controlplane" level="DEBUG"/>
+        
+        <logger name="com.platform.controlplane" level="INFO"/>
+        <logger name="org.springframework.web" level="WARN"/>
+        <logger name="org.springframework.kafka" level="WARN"/>
+        <logger name="io.lettuce" level="WARN"/>
     </springProfile>
+    
+    <!-- Default (JSON output) -->
+    <springProfile name="!dev,!prod,!production">
+        <root level="INFO">
+            <appender-ref ref="ASYNC_JSON"/>
+        </root>
+    </springProfile>
+    
 </configuration>

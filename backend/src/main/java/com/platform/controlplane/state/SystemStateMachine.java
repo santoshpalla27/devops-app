@@ -24,7 +24,7 @@ public class SystemStateMachine {
     private final MetricsRegistry metricsRegistry;
     
     // Lazy to avoid circular dependency
-    private com.platform.controlplane.policy.PolicyEvaluator policyEvaluator;
+    private com.platform.controlplane.policy.PolicySchedulerService policyScheduler;
     
     // Valid state transitions (from -> to)
     private static final Map<SystemState, Set<SystemState>> ALLOWED_TRANSITIONS = Map.of(
@@ -44,11 +44,11 @@ public class SystemStateMachine {
     }
     
     /**
-     * Set policy evaluator (lazy injection to avoid circular dependency).
+     * Set policy scheduler (lazy injection to avoid circular dependency).
      */
     @Lazy
-    public void setPolicyEvaluator(com.platform.controlplane.policy.PolicyEvaluator policyEvaluator) {
-        this.policyEvaluator = policyEvaluator;
+    public void setPolicyScheduler(com.platform.controlplane.policy.PolicySchedulerService policyScheduler) {
+        this.policyScheduler = policyScheduler;
     }
     
     /**
@@ -88,33 +88,35 @@ public class SystemStateMachine {
             return current;
         }
         
+        SystemState previousState = current.currentState();
+        
         // Apply transition
         SystemStateContext newContext = current.withState(targetState, reason);
         stateContexts.put(systemType, newContext);
         
         // Audit log
         log.info("State transition: {} -> {} for {} (reason: {})", 
-            current.currentState(), targetState, systemType, reason);
+            previousState, targetState, systemType, reason);
         
         // Emit metrics
-        metricsRegistry.recordStateTransition(systemType, current.currentState(), targetState);
+        metricsRegistry.recordStateTransition(systemType, previousState, targetState);
         
         // Emit Kafka event
-        emitStateChangeEvent(systemType, current.currentState(), targetState, reason);
+        emitStateChangeEvent(systemType, previousState, targetState, reason);
         
-        // Trigger policy evaluation (if configured)
-        triggerPolicyEvaluation(systemType);
+        // Trigger event-driven policy evaluation
+        triggerPolicyEvaluation(systemType, previousState.name(), targetState.name());
         
         return newContext;
     }
     
     /**
-     * Trigger policy evaluation for a system (if policy evaluator is configured).
+     * Trigger policy evaluation for a system on state change.
      */
-    private void triggerPolicyEvaluation(String systemType) {
-        if (policyEvaluator != null) {
+    private void triggerPolicyEvaluation(String systemType, String previousState, String newState) {
+        if (policyScheduler != null) {
             try {
-                policyEvaluator.evaluateForSystem(systemType);
+                policyScheduler.onStateChange(systemType, previousState, newState);
             } catch (Exception e) {
                 log.error("Policy evaluation failed for {}: {}", systemType, e.getMessage());
             }

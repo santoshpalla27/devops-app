@@ -1,0 +1,110 @@
+{
+    "index_patterns": [
+        "chaos-events-*"
+    ],
+    "priority": 100,
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "chaos-ilm",
+            "index.lifecycle.rollover_alias": "chaos-events",
+            "index.mapping.total_fields.limit": 2000,
+            "index.refresh_interval": "5s"
+        },
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "@timestamp": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis"
+                },
+                "ingest_time": {
+                    "type": "date"
+                },
+                "log": {
+                    "properties": {
+                        "level": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "service": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "environment": {
+                    "type": "keyword"
+                },
+                "event_type": {
+                    "type": "keyword"
+                },
+                "trace_id": {
+                    "type": "keyword"
+                },
+                "span_id": {
+                    "type": "keyword"
+                },
+                "request_id": {
+                    "type": "keyword"
+                },
+                "host": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "chaos_experiment_id": {
+                    "type": "keyword"
+                },
+                "system_type": {
+                    "type": "keyword"
+                },
+                "fault_type": {
+                    "type": "keyword"
+                },
+                "actor": {
+                    "type": "keyword"
+                },
+                "action": {
+                    "type": "keyword"
+                },
+                "duration_seconds": {
+                    "type": "integer"
+                },
+                "duration_ms": {
+                    "type": "long"
+                },
+                "intensity": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "error_code": {
+                    "type": "keyword"
+                },
+                "error_message": {
+                    "type": "text"
+                },
+                "message": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "_meta": {
+        "description": "Chaos engineering events for experiments",
+        "version": 1
+    }
+}

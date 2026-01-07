@@ -1,10 +1,14 @@
 package com.platform.controlplane.policy;
 
 import com.platform.controlplane.observability.MetricsRegistry;
+import com.platform.controlplane.persistence.EntityMappers;
+import com.platform.controlplane.persistence.entity.PolicyExecutionRecordEntity;
+import com.platform.controlplane.persistence.repository.PolicyExecutionRecordJpaRepository;
 import com.platform.controlplane.state.SystemStateContext;
 import com.platform.controlplane.state.SystemStateMachine;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -12,11 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Evaluates policies and triggers actions when conditions are met.
  * Includes cooldown management and execution history tracking.
+ * 
+ * Execution records are persisted to database for durability.
  */
 @Slf4j
 @Component
@@ -26,23 +31,27 @@ public class PolicyEvaluator {
     private final SystemStateMachine stateMachine;
     private final PolicyRepository policyRepository;
     private final MetricsRegistry metricsRegistry;
+    private final PolicyExecutionRecordJpaRepository executionRecordRepository;
+    private final EntityMappers entityMappers;
     
-    // Track last execution time per policy to enforce cooldowns
+    // Track last execution time per policy to enforce cooldowns (in-memory cache)
     private final Map<String, Instant> lastExecutionTimes = new ConcurrentHashMap<>();
     
-    // Execution history (limited to last 1000 records)
-    private final List<PolicyExecutionRecord> executionHistory = new ArrayList<>();
-    private static final int MAX_HISTORY_SIZE = 1000;
+    private static final int DEFAULT_HISTORY_LIMIT = 1000;
     
     public PolicyEvaluator(
             ActionExecutor actionExecutor,
             SystemStateMachine stateMachine,
             PolicyRepository policyRepository,
-            MetricsRegistry metricsRegistry) {
+            MetricsRegistry metricsRegistry,
+            PolicyExecutionRecordJpaRepository executionRecordRepository,
+            EntityMappers entityMappers) {
         this.actionExecutor = actionExecutor;
         this.stateMachine = stateMachine;
         this.policyRepository = policyRepository;
         this.metricsRegistry = metricsRegistry;
+        this.executionRecordRepository = executionRecordRepository;
+        this.entityMappers = entityMappers;
     }
     
     /**
@@ -86,11 +95,11 @@ public class PolicyEvaluator {
             metricsRegistry.recordPolicyExecution(policy.getName(), systemType, 
                 policy.getAction().toString(), record.isSuccess());
             
-           // Update last execution time
+            // Update last execution time
             lastExecutionTimes.put(policy.getId(), Instant.now());
             
-            // Add to history
-            addToHistory(record);
+            // Persist to database
+            persistExecutionRecord(record);
             
             MDC.clear();
             
@@ -116,7 +125,7 @@ public class PolicyEvaluator {
         
         if (!policy.getCondition().evaluate(context)) {
             log.info("Policy '{}' condition not met for {}", policy.getName(), systemType);
-            return PolicyExecutionRecord.builder()
+            PolicyExecutionRecord record = PolicyExecutionRecord.builder()
                 .policyId(policy.getId())
                 .policyName(policy.getName())
                 .systemType(systemType)
@@ -125,13 +134,27 @@ public class PolicyEvaluator {
                 .message("Condition not met: " + policy.getCondition().describe())
                 .durationMs(0)
                 .build();
+            persistExecutionRecord(record);
+            return record;
         }
         
         PolicyExecutionRecord record = actionExecutor.execute(policy, systemType);
         lastExecutionTimes.put(policy.getId(), Instant.now());
-        addToHistory(record);
+        persistExecutionRecord(record);
         
         return record;
+    }
+    
+    /**
+     * Persist execution record to database.
+     */
+    private void persistExecutionRecord(PolicyExecutionRecord record) {
+        try {
+            PolicyExecutionRecordEntity entity = entityMappers.toEntity(record);
+            executionRecordRepository.save(entity);
+        } catch (Exception e) {
+            log.error("Failed to persist execution record: {}", e.getMessage());
+        }
     }
     
     /**
@@ -140,7 +163,15 @@ public class PolicyEvaluator {
     private boolean isCooldownExpired(Policy policy) {
         Instant lastExecution = lastExecutionTimes.get(policy.getId());
         if (lastExecution == null) {
-            return true; // Never executed
+            // Check database for last execution
+            List<PolicyExecutionRecordEntity> recent = executionRecordRepository
+                .findByPolicyIdOrderByExecutedAtDesc(policy.getId(), PageRequest.of(0, 1));
+            if (!recent.isEmpty()) {
+                lastExecution = recent.get(0).getExecutedAt();
+                lastExecutionTimes.put(policy.getId(), lastExecution); // Cache it
+            } else {
+                return true; // Never executed
+            }
         }
         
         long secondsSinceLastExecution = Instant.now().getEpochSecond() - lastExecution.getEpochSecond();
@@ -148,32 +179,24 @@ public class PolicyEvaluator {
     }
     
     /**
-     * Add execution record to history with size limit.
-     */
-    private synchronized void addToHistory(PolicyExecutionRecord record) {
-        executionHistory.add(record);
-        
-        // Trim history if too large
-        if (executionHistory.size() > MAX_HISTORY_SIZE) {
-            executionHistory.remove(0);
-        }
-    }
-    
-    /**
      * Get execution history, optionally filtered by system and/or policy.
      */
     public List<PolicyExecutionRecord> getExecutionHistory(String systemType, String policyId, int limit) {
-        return executionHistory.stream()
-            .filter(record -> systemType == null || record.getSystemType().equalsIgnoreCase(systemType))
-            .filter(record -> policyId == null || record.getPolicyId().equals(policyId))
-            .limit(limit > 0 ? limit : MAX_HISTORY_SIZE)
-            .collect(Collectors.toList());
+        int actualLimit = limit > 0 ? limit : DEFAULT_HISTORY_LIMIT;
+        
+        return executionRecordRepository.findFiltered(
+                systemType, 
+                policyId, 
+                PageRequest.of(0, actualLimit)
+            ).stream()
+            .map(entityMappers::toDomain)
+            .toList();
     }
     
     /**
-     * Get all execution history.
+     * Get all execution history (with default limit).
      */
     public List<PolicyExecutionRecord> getExecutionHistory() {
-        return new ArrayList<>(executionHistory);
+        return getExecutionHistory(null, null, DEFAULT_HISTORY_LIMIT);
     }
 }

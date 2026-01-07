@@ -1,0 +1,96 @@
+# ==================== Recording Rules ====================
+# Pre-compute expensive queries for dashboards and alerts
+
+groups:
+  # HTTP metrics
+  - name: controlplane_http_recording
+    interval: 15s
+    rules:
+      # Request rate (5m)
+      - record: controlplane:http_requests:rate5m
+        expr: sum(rate(controlplane_http_requests_total[5m])) by (method, endpoint, status)
+
+      # Error rate (5m)
+      - record: controlplane:http_errors:rate5m
+        expr: sum(rate(controlplane_http_request_errors_total[5m])) by (endpoint, error_code)
+
+      # Request latency P95
+      - record: controlplane:http_request_duration_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(controlplane_http_request_duration_seconds_bucket[5m])) by (le, endpoint))
+
+      # Availability (success rate)
+      - record: controlplane:http_availability:ratio5m
+        expr: |
+          sum(rate(controlplane_http_requests_total{status="success"}[5m]))
+          /
+          sum(rate(controlplane_http_requests_total[5m]))
+
+  # Chaos metrics
+  - name: controlplane_chaos_recording
+    interval: 15s
+    rules:
+      # Injection rate
+      - record: controlplane:chaos_injection:rate1h
+        expr: sum(rate(controlplane_chaos_injection_total[1h])) by (system_type, fault_type, status)
+
+      # Recovery success rate
+      - record: controlplane:chaos_recovery_success:ratio1h
+        expr: |
+          sum(rate(controlplane_chaos_recovery_total{status="success"}[1h]))
+          /
+          sum(rate(controlplane_chaos_recovery_total[1h]))
+
+      # Average recovery time
+      - record: controlplane:chaos_recovery_duration_seconds:avg
+        expr: |
+          sum(rate(controlplane_chaos_recovery_duration_seconds_sum[5m]))
+          /
+          sum(rate(controlplane_chaos_recovery_duration_seconds_count[5m]))
+
+  # Policy metrics
+  - name: controlplane_policy_recording
+    interval: 15s
+    rules:
+      # Evaluation rate
+      - record: controlplane:policy_evaluations:rate5m
+        expr: sum(rate(controlplane_policy_evaluations_total[5m])) by (system_type)
+
+      # Trigger rate
+      - record: controlplane:policy_triggers:rate5m
+        expr: sum(rate(controlplane_policy_triggers_total[5m])) by (system_type, policy_action)
+
+      # Policy latency P95
+      - record: controlplane:policy_evaluation_duration_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le))
+
+      # Error rate
+      - record: controlplane:policy_errors:rate5m
+        expr: sum(rate(controlplane_policy_action_errors_total[5m])) by (system_type, policy_action)
+
+  # Kafka metrics
+  - name: controlplane_kafka_recording
+    interval: 15s
+    rules:
+      # Dispatch rate
+      - record: controlplane:kafka_dispatch:rate5m
+        expr: sum(rate(controlplane_kafka_dispatch_total[5m])) by (status)
+
+      # Error rate
+      - record: controlplane:kafka_errors:rate5m
+        expr: sum(rate(controlplane_kafka_dispatch_errors_total[5m]))
+
+  # Connector metrics
+  - name: controlplane_connector_recording
+    interval: 15s
+    rules:
+      # Error rate by system
+      - record: controlplane:connector_errors:rate5m
+        expr: sum(rate(controlplane_connector_errors_total[5m])) by (system_type)
+
+      # Reconnect rate
+      - record: controlplane:connector_reconnects:rate5m
+        expr: sum(rate(controlplane_connector_reconnects_total[5m])) by (system_type)
+
+      # Latency P95
+      - record: controlplane:connector_latency_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(controlplane_connector_latency_seconds_bucket[5m])) by (le, system_type))

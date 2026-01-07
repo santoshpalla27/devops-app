@@ -1,11 +1,12 @@
 package com.platform.controlplane.chaos;
 
 import com.platform.controlplane.observability.MetricsRegistry;
-import lombok.RequiredArgsConstructor;
+import com.platform.controlplane.recovery.StartupRecoveryService;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -13,15 +14,27 @@ import java.util.stream.Collectors;
 
 /**
  * Service for managing chaos experiments.
+ * Integrates with StartupRecoveryService for scheduling experiment terminations.
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ChaosService {
     
     private final ChaosRepository chaosRepository;
     private final Map<String, FaultInjector> faultInjectors;
     private final MetricsRegistry metricsRegistry;
+    private final StartupRecoveryService recoveryService;
+    
+    public ChaosService(
+            ChaosRepository chaosRepository,
+            Map<String, FaultInjector> faultInjectors,
+            MetricsRegistry metricsRegistry,
+            StartupRecoveryService recoveryService) {
+        this.chaosRepository = chaosRepository;
+        this.faultInjectors = faultInjectors;
+        this.metricsRegistry = metricsRegistry;
+        this.recoveryService = recoveryService;
+    }
     
     /**
      * Start a chaos experiment.
@@ -54,6 +67,18 @@ public class ChaosService {
         if (success) {
             metricsRegistry.recordFaultInjected(experiment.getSystemType(), 
                 experiment.getFaultType().toString());
+            
+            // Schedule auto-termination if duration is set
+            if (experiment.getDurationSeconds() > 0) {
+                Duration delay = Duration.ofSeconds(experiment.getDurationSeconds());
+                recoveryService.scheduleExperimentTermination(
+                    experiment.getId(), 
+                    experiment.getSystemType(), 
+                    delay
+                );
+                log.info("Scheduled auto-termination for experiment {} in {}", 
+                    experiment.getId(), delay);
+            }
         }
         
         if (!success) {
@@ -62,7 +87,7 @@ public class ChaosService {
             experiment.setResult("Failed to inject fault");
         }
         
-        // Save experiment
+        // Save experiment (entity mapper will calculate scheduledEndAt)
         chaosRepository.save(experiment);
         
         MDC.clear();
@@ -87,11 +112,14 @@ public class ChaosService {
             return experiment;
         }
         
+        // Cancel scheduled termination if any
+        recoveryService.cancelScheduledTermination(experimentId);
+        
         // Set MDC
         MDC.put("experimentId", experimentId);
         MDC.put("systemType", experiment.getSystemType());
         
- long startTime = experiment.getStartedAt() != null ? 
+        long startTime = experiment.getStartedAt() != null ? 
             experiment.getStartedAt().toEpochMilli() : System.currentTimeMillis();
         
         // Get injector

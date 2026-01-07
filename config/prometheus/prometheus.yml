@@ -1,14 +1,84 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    environment: development
+    service: controlplane
 
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape jobs
 scrape_configs:
+  # Control Plane backend
   - job_name: 'controlplane-backend'
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['backend:8080']
+        labels:
+          app: controlplane
+          component: backend
     scrape_interval: 10s
+    scrape_timeout: 5s
 
+  # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+        labels:
+          component: prometheus
+
+  # Alertmanager
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          component: alertmanager
+
+  # Node exporter (host metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          component: node
+
+  # MySQL exporter (if running)
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql-primary:9104']
+        labels:
+          component: mysql
+    scrape_interval: 30s
+
+  # Redis exporter (if running)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-master:9121']
+        labels:
+          component: redis
+    scrape_interval: 30s
+
+  # Kafka exporter (if running)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9308']
+        labels:
+          component: kafka
+    scrape_interval: 30s
+
+  # Elasticsearch (EFK stack)
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+        labels:
+          component: elasticsearch
+    metrics_path: '/_prometheus/metrics'
+    scrape_interval: 30s

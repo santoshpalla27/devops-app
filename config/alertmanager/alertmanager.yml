@@ -1,0 +1,136 @@
+global:
+  # Resolve timeout
+  resolve_timeout: 5m
+  
+  # SMTP for email notifications (optional)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@example.com'
+
+# Route configuration
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity', 'team']
+  
+  # Wait before sending grouped alerts
+  group_wait: 30s
+  
+  # Wait before sending updates for a group
+  group_interval: 5m
+  
+  # Repeat interval for alerts
+  repeat_interval: 4h
+  
+  # Child routes for team-based routing
+  routes:
+    # Critical alerts - immediate
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+      
+    # Platform team
+    - match:
+        team: platform
+      receiver: 'platform-team'
+      
+    # Chaos team
+    - match:
+        team: chaos
+      receiver: 'chaos-team'
+      
+    # Policy team
+    - match:
+        team: policy
+      receiver: 'policy-team'
+      
+    # Infra team
+    - match:
+        team: infra
+      receiver: 'infra-team'
+      
+    # Security team
+    - match:
+        team: security
+      receiver: 'security-team'
+      
+    # Messaging team
+    - match:
+        team: messaging
+      receiver: 'messaging-team'
+
+# Inhibition rules - suppress alerts when parent alert fires
+inhibit_rules:
+  # If API is down, suppress all other API alerts
+  - source_match:
+      alertname: PrometheusTargetDown
+      job: controlplane-backend
+    target_match:
+      team: platform
+    equal: ['instance']
+    
+  # If connector is down, suppress policy alerts for that system
+  - source_match:
+      alertname: ConnectorUnhealthy
+    target_match:
+      alertname: PolicyActionFailures
+    equal: ['system_type']
+
+# Receivers
+receivers:
+  # Default receiver (webhook to logging)
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts'
+        send_resolved: true
+        
+  # Critical - multiple channels
+  - name: 'critical-receiver'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/critical'
+        send_resolved: true
+    # Uncomment for Slack
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/XXX'
+    #     channel: '#alerts-critical'
+    #     send_resolved: true
+    #     title: '{{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        
+  # Team-specific receivers
+  - name: 'platform-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/platform'
+        send_resolved: true
+        
+  - name: 'chaos-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/chaos'
+        send_resolved: true
+        
+  - name: 'policy-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/policy'
+        send_resolved: true
+        
+  - name: 'infra-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/infra'
+        send_resolved: true
+        
+  - name: 'security-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/security'
+        send_resolved: true
+        
+  - name: 'messaging-team'
+    webhook_configs:
+      - url: 'http://backend:8080/api/webhooks/alerts/messaging'
+        send_resolved: true
+
+# Templates (optional)
+# templates:
+#   - '/etc/alertmanager/templates/*.tmpl'

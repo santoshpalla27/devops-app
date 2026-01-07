@@ -1,6 +1,6 @@
 services:
   # ==================== Application Services ====================
-
+ 
   backend:
     build:
       context: ./backend
@@ -52,33 +52,23 @@ services:
       timeout: 10s
       retries: 3
 
-  # ==================== Tester Service ====================
+  # ==================== Toxiproxy (Chaos Engineering) ====================
 
-  tester:
-    build:
-      context: ./tester-service
-      dockerfile: Dockerfile
-    container_name: controlplane-tester
-    environment:
-      - CONTROL_PLANE_URL=http://backend:8080
-      - KAFKA_BOOTSTRAP=kafka:9092
-      - PROMETHEUS_URL=http://prometheus:9090
-    depends_on:
-      backend:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.7.0
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"   # Toxiproxy API
+      - "13306:13306" # MySQL proxy
+      - "16379:16379" # Redis proxy
     networks:
       - controlplane-net
-    # Run all tests on startup, then keep container running for manual tests
-    entrypoint: [ "/bin/sh", "-c" ]
-    command:
-      - |
-        echo "🚀 Running initial test suite..."
-        python main.py ci --scenarios-dir scenarios || echo "⚠️  Some tests failed, but keeping container running"
-        echo "✅ Tests complete. Container staying alive for manual testing."
-        echo "Run: docker exec -it controlplane-tester python main.py run --scenario scenarios/mysql_failure.yaml"
-        tail -f /dev/null
+    healthcheck:
+      test: [ "CMD", "/toxiproxy-cli", "list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   # ==================== MySQL (Primary-Replica) ====================
 
@@ -250,11 +240,19 @@ services:
       - "9090:9090"
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+      - ./config/prometheus/alertmanager.yml:/etc/prometheus/alertmanager.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=15d'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     networks:
       - controlplane-net
     healthcheck:
@@ -262,6 +260,59 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
+
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/metrics" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 
   grafana:
     image: grafana/grafana:10.2.0
@@ -298,6 +349,120 @@ services:
     networks:
       - controlplane-net
 
+  # ==================== ELK Stack ====================
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=controlplane-logs
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+      - ./config/elasticsearch/ilm-policies.json:/usr/share/elasticsearch/config/ilm-policies.json:ro
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: logstash
+    volumes:
+      - ./config/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./config/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    environment:
+      - "LS_JAVA_OPTS=-Xms256m -Xmx256m"
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9600/_node/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - XPACK_SECURITY_ENABLED=false
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - controlplane-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # Elasticsearch setup container (runs once to configure ILM, templates)
+  elasticsearch-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch-setup
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./config/elasticsearch:/setup:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Waiting for Elasticsearch..."
+        sleep 10
+        
+        echo "Creating ILM policies..."
+        curl -X PUT "http://elasticsearch:9200/_ilm/policy/application-logs-policy" -H 'Content-Type: application/json' -d @/setup/ilm-application-logs.json
+        curl -X PUT "http://elasticsearch:9200/_ilm/policy/audit-logs-policy" -H 'Content-Type: application/json' -d @/setup/ilm-audit-logs.json
+        curl -X PUT "http://elasticsearch:9200/_ilm/policy/chaos-events-policy" -H 'Content-Type: application/json' -d @/setup/ilm-chaos-events.json
+        curl -X PUT "http://elasticsearch:9200/_ilm/policy/security-events-policy" -H 'Content-Type: application/json' -d @/setup/ilm-security-events.json
+        
+        echo "Creating index templates..."
+        curl -X PUT "http://elasticsearch:9200/_index_template/application-logs" -H 'Content-Type: application/json' -d @/setup/template-application-logs.json
+        curl -X PUT "http://elasticsearch:9200/_index_template/audit-logs" -H 'Content-Type: application/json' -d @/setup/template-audit-logs.json
+        curl -X PUT "http://elasticsearch:9200/_index_template/chaos-events" -H 'Content-Type: application/json' -d @/setup/template-chaos-events.json
+        curl -X PUT "http://elasticsearch:9200/_index_template/security-events" -H 'Content-Type: application/json' -d @/setup/template-security-events.json
+        
+        echo "Creating ingest pipelines..."
+        curl -X PUT "http://elasticsearch:9200/_ingest/pipeline/logs-pipeline" -H 'Content-Type: application/json' -d @/setup/ingest-pipeline.json
+        
+        echo "Setup complete!"
+    networks:
+      - controlplane-net
+
 networks:
   controlplane-net:
     driver: bridge
@@ -311,3 +476,5 @@ volumes:
   kafka-data:
   prometheus-data:
   grafana-data:
+  elasticsearch-data:
+  alertmanager-data:

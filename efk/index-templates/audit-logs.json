@@ -1,0 +1,103 @@
+{
+    "index_patterns": [
+        "audit-logs-*"
+    ],
+    "priority": 100,
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "audit-ilm",
+            "index.lifecycle.rollover_alias": "audit-logs",
+            "index.mapping.total_fields.limit": 2000,
+            "index.refresh_interval": "5s"
+        },
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "@timestamp": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis"
+                },
+                "ingest_time": {
+                    "type": "date"
+                },
+                "log": {
+                    "properties": {
+                        "level": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "service": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "environment": {
+                    "type": "keyword"
+                },
+                "event_type": {
+                    "type": "keyword"
+                },
+                "trace_id": {
+                    "type": "keyword"
+                },
+                "span_id": {
+                    "type": "keyword"
+                },
+                "request_id": {
+                    "type": "keyword"
+                },
+                "host": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "actor": {
+                    "type": "keyword"
+                },
+                "action": {
+                    "type": "keyword"
+                },
+                "resource_type": {
+                    "type": "keyword"
+                },
+                "resource_id": {
+                    "type": "keyword"
+                },
+                "policy_id": {
+                    "type": "keyword"
+                },
+                "changes": {
+                    "type": "object",
+                    "enabled": true,
+                    "dynamic": true
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
+                        }
+                    }
+                },
+                "client_ip": {
+                    "type": "ip"
+                }
+            }
+        }
+    },
+    "_meta": {
+        "description": "Audit logs for policy and resource changes",
+        "version": 1
+    }
+}

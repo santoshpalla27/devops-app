@@ -1,0 +1,33 @@
+{
+    "attributes": {
+        "title": "Chaos Impact Dashboard",
+        "description": "Operator dashboard for analyzing chaos experiment impact on system health. Answer: What is the blast radius of this experiment?",
+        "panelsJSON": "[{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":0,\"w\":24,\"h\":8,\"i\":\"1\"},\"panelIndex\":\"1\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Chaos Experiments Timeline\",\"description\":\"When were experiments running?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"legend\":{\"isVisible\":true,\"position\":\"right\"},\"valueLabels\":\"hide\",\"preferredSeriesType\":\"bar_stacked\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"position\":\"top\",\"seriesType\":\"bar_stacked\",\"layerType\":\"data\",\"xAccessor\":\"@timestamp\",\"splitAccessor\":\"fault_type\"}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_STARTED OR event_type: CHAOS_INJECTION_COMPLETED\",\"language\":\"kuery\"},\"datasourceStates\":{\"formBased\":{\"layers\":{\"layer1\":{\"columns\":{\"@timestamp\":{\"label\":\"Time\",\"dataType\":\"date\",\"isBucketed\":true,\"operationType\":\"date_histogram\",\"params\":{\"interval\":\"auto\"}},\"fault_type\":{\"label\":\"Fault Type\",\"dataType\":\"string\",\"isBucketed\":true,\"operationType\":\"terms\",\"params\":{\"field\":\"fault_type\",\"size\":10}},\"count\":{\"label\":\"Count\",\"dataType\":\"number\",\"isBucketed\":false,\"operationType\":\"count\"}},\"columnOrder\":[\"@timestamp\",\"fault_type\",\"count\"]}}}}}}},\"title\":\"Chaos Experiments Timeline\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":24,\"y\":0,\"w\":24,\"h\":8,\"i\":\"2\"},\"panelIndex\":\"2\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Fault Type Distribution\",\"description\":\"Which fault types are most common?\",\"visualizationType\":\"lnsPie\",\"state\":{\"visualization\":{\"shape\":\"donut\",\"layers\":[{\"layerId\":\"layer1\",\"primaryGroups\":[\"fault_type\"],\"metrics\":[\"count\"]}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_STARTED\",\"language\":\"kuery\"}}}},\"title\":\"Fault Type Distribution\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":8,\"w\":16,\"h\":8,\"i\":\"3\"},\"panelIndex\":\"3\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Recovery Time Distribution\",\"description\":\"How long do recoveries take?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"duration_ms\"],\"xAccessor\":\"system_type\"}]},\"query\":{\"query\":\"event_type: CHAOS_RECOVERY_COMPLETED\",\"language\":\"kuery\"}}}},\"title\":\"Recovery Time Distribution\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":16,\"y\":8,\"w\":16,\"h\":8,\"i\":\"4\"},\"panelIndex\":\"4\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Failed Experiments\",\"description\":\"Which experiments failed?\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"chaos_experiment_id\"},{\"columnId\":\"system_type\"},{\"columnId\":\"error_code\"},{\"columnId\":\"error_message\"}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_FAILED OR event_type: CHAOS_RECOVERY_FAILED\",\"language\":\"kuery\"}}}},\"title\":\"Failed Experiments\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":32,\"y\":8,\"w\":16,\"h\":8,\"i\":\"5\"},\"panelIndex\":\"5\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Success Rate by System\",\"description\":\"Which systems have highest failure rate?\",\"visualizationType\":\"lnsMetric\",\"state\":{\"visualization\":{\"layerId\":\"layer1\",\"layerType\":\"data\"},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_COMPLETED OR event_type: CHAOS_INJECTION_FAILED\",\"language\":\"kuery\"}}}},\"title\":\"Success Rate by System\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":16,\"w\":48,\"h\":10,\"i\":\"6\"},\"panelIndex\":\"6\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Experiment Details\",\"description\":\"Drill down into specific experiments\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"chaos_experiment_id\"},{\"columnId\":\"event_type\"},{\"columnId\":\"system_type\"},{\"columnId\":\"fault_type\"},{\"columnId\":\"actor\"},{\"columnId\":\"success\"},{\"columnId\":\"duration_ms\"}]},\"query\":{\"query\":\"event_type: CHAOS_*\",\"language\":\"kuery\"}}}},\"title\":\"Experiment Details\"}]",
+        "optionsJSON": "{\"useMargins\":true,\"syncColors\":false,\"syncCursor\":true,\"syncTooltips\":false,\"hidePanelTitles\":false}",
+        "timeRestore": true,
+        "timeTo": "now",
+        "timeFrom": "now-24h",
+        "refreshInterval": {
+            "pause": false,
+            "value": 30000
+        },
+        "kibanaSavedObjectMeta": {
+            "searchSourceJSON": "{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+        }
+    },
+    "coreMigrationVersion": "8.8.0",
+    "created_at": "2026-01-07T12:00:00.000Z",
+    "id": "chaos-impact-dashboard",
+    "managed": false,
+    "references": [
+        {
+            "id": "chaos-events-index-pattern",
+            "name": "indexpattern-datasource-layer-layer1",
+            "type": "index-pattern"
+        }
+    ],
+    "type": "dashboard",
+    "typeMigrationVersion": "8.9.0",
+    "updated_at": "2026-01-07T12:00:00.000Z",
+    "version": "WzUsMV0="
+}

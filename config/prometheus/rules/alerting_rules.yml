@@ -1,0 +1,201 @@
+# ==================== Alerting Rules ====================
+# Based on SLIs from METRICS_CONTRACT.md
+
+groups:
+  # API Availability Alerts
+  - name: controlplane_api_alerts
+    rules:
+      # SLI: API Availability < 99.9%
+      - alert: APIAvailabilityLow
+        expr: controlplane:http_availability:ratio5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API availability below SLO"
+          description: "API availability is {{ $value | humanizePercentage }}, target is 99.9%"
+          runbook: "https://runbooks.example.com/api-availability"
+
+      # High error rate
+      - alert: APIHighErrorRate
+        expr: sum(rate(controlplane_http_request_errors_total[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High API error rate"
+          description: "API errors at {{ $value | humanize }}/sec"
+
+      # High latency (P95 > 1s)
+      - alert: APIHighLatency
+        expr: controlplane:http_request_duration_seconds:p95 > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "API latency exceeds 1 second (P95)"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+  # Chaos Engineering Alerts
+  - name: controlplane_chaos_alerts
+    rules:
+      # SLI: Chaos Recovery Success Rate < 99%
+      - alert: ChaosRecoveryFailureRate
+        expr: controlplane:chaos_recovery_success:ratio1h < 0.99
+        for: 10m
+        labels:
+          severity: critical
+          team: chaos
+        annotations:
+          summary: "Chaos recovery success rate below SLO"
+          description: "Recovery success rate is {{ $value | humanizePercentage }}, target is 99%"
+
+      # Stuck experiments (active > 1 hour)
+      - alert: ChaosExperimentStuck
+        expr: controlplane_chaos_active_experiments > 0 and time() - controlplane_chaos_active_experiments > 3600
+        for: 5m
+        labels:
+          severity: warning
+          team: chaos
+        annotations:
+          summary: "Chaos experiment running for too long"
+          description: "{{ $value }} experiments have been active for >1 hour"
+
+      # High failure rate
+      - alert: ChaosInjectionFailures
+        expr: sum(rate(controlplane_chaos_injection_total{status="failure"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: chaos
+        annotations:
+          summary: "High chaos injection failure rate"
+          description: "Failure rate: {{ $value | humanize }}/sec"
+
+  # Policy Engine Alerts
+  - name: controlplane_policy_alerts
+    rules:
+      # SLI: Policy Latency P95 > 100ms
+      - alert: PolicyLatencyHigh
+        expr: controlplane:policy_evaluation_duration_seconds:p95 > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: policy
+        annotations:
+          summary: "Policy evaluation latency exceeds 100ms (P95)"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+      # Policy action failures
+      - alert: PolicyActionFailures
+        expr: sum(rate(controlplane_policy_action_errors_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: policy
+        annotations:
+          summary: "Policy actions are failing"
+          description: "Failure rate: {{ $value | humanize }}/sec"
+
+  # Connector Alerts
+  - name: controlplane_connector_alerts
+    rules:
+      # SLI: Connector Health < 99%
+      - alert: ConnectorUnhealthy
+        expr: sum(rate(controlplane_connector_errors_total[5m])) / sum(rate(controlplane_connector_latency_seconds_count[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          team: infra
+        annotations:
+          summary: "Connector error rate exceeds 1%"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+
+      # High reconnect rate
+      - alert: ConnectorHighReconnects
+        expr: sum(rate(controlplane_connector_reconnects_total[5m])) by (system_type) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: infra
+        annotations:
+          summary: "High connector reconnect rate for {{ $labels.system_type }}"
+          description: "Reconnect rate: {{ $value | humanize }}/sec"
+
+  # Kafka Alerts
+  - name: controlplane_kafka_alerts
+    rules:
+      # Outbox backlog
+      - alert: KafkaOutboxBacklog
+        expr: controlplane_kafka_outbox_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: messaging
+        annotations:
+          summary: "Kafka outbox backlog growing"
+          description: "{{ $value }} messages pending in outbox"
+
+      # DLQ growing
+      - alert: KafkaDeadLetterQueueGrowing
+        expr: rate(controlplane_kafka_outbox_dlq[1h]) > 0
+        for: 15m
+        labels:
+          severity: warning
+          team: messaging
+        annotations:
+          summary: "Messages going to dead letter queue"
+          description: "DLQ rate: {{ $value | humanize }}/sec"
+
+  # Security Alerts
+  - name: controlplane_security_alerts
+    rules:
+      # High rate limit blocks
+      - alert: HighRateLimitBlocks
+        expr: sum(rate(controlplane_ratelimit_blocked_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "High rate of blocked requests"
+          description: "Block rate: {{ $value | humanize }}/sec"
+
+      # Validation failures spike
+      - alert: ValidationFailureSpike
+        expr: sum(rate(controlplane_validation_failures_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: info
+          team: security
+        annotations:
+          summary: "Elevated validation failures"
+          description: "Failure rate: {{ $value | humanize }}/sec"
+
+  # Infrastructure Alerts
+  - name: controlplane_infra_alerts
+    rules:
+      # Prometheus target down
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Prometheus target is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} is down"
+
+      # High scheduler lag
+      - alert: SchedulerLagHigh
+        expr: controlplane_scheduler_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: policy
+        annotations:
+          summary: "Policy scheduler is lagging"
+          description: "Scheduler lag: {{ $value | humanizeDuration }}"

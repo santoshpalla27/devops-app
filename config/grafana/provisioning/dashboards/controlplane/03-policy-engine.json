@@ -1,0 +1,473 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": false,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [
+        {
+            "asDropdown": true,
+            "icon": "external link",
+            "includeVars": true,
+            "keepTime": true,
+            "tags": [
+                "controlplane"
+            ],
+            "title": "Related",
+            "type": "dashboards"
+        }
+    ],
+    "panels": [
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_evaluations_total[5m]))",
+                    "legendFormat": "Evaluations/sec",
+                    "refId": "A"
+                }
+            ],
+            "title": "Evaluation Rate",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 6,
+                "y": 0
+            },
+            "id": 2,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s",
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.05
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.1
+                            }
+                        ]
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.95, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P95",
+                    "refId": "A"
+                }
+            ],
+            "title": "Evaluation Latency (SLI)",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 12,
+                "y": 0
+            },
+            "id": 3,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_triggers_total[5m]))",
+                    "legendFormat": "Triggers/sec",
+                    "refId": "A"
+                }
+            ],
+            "title": "Trigger Rate",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 18,
+                "y": 0
+            },
+            "id": 4,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.01
+                            }
+                        ]
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_action_errors_total[5m]))",
+                    "legendFormat": "Errors/sec",
+                    "refId": "A"
+                }
+            ],
+            "title": "Action Errors",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 3
+            },
+            "id": 5,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_evaluations_total[5m])) by (system_type)",
+                    "legendFormat": "{{system_type}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Evaluation Rate by System",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 3
+            },
+            "id": 6,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.50, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P50",
+                    "refId": "A"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.95, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P95",
+                    "refId": "B"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.99, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P99",
+                    "refId": "C"
+                }
+            ],
+            "title": "Evaluation Latency Distribution",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 11
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_triggers_total[5m])) by (policy_action)",
+                    "legendFormat": "{{policy_action}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Triggers by Action Type",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 11
+            },
+            "id": 8,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_triggers_total[5m])) by (system_type)",
+                    "legendFormat": "{{system_type}} triggered",
+                    "refId": "A"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_policy_action_errors_total[5m])) by (system_type)",
+                    "legendFormat": "{{system_type}} failed",
+                    "refId": "B"
+                }
+            ],
+            "title": "Success vs Failure by System",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 12,
+                "x": 0,
+                "y": 19
+            },
+            "id": 9,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "controlplane_policy_active_count",
+                    "legendFormat": "Active",
+                    "refId": "A"
+                }
+            ],
+            "title": "Active Policies",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 12,
+                "x": 12,
+                "y": 19
+            },
+            "id": 10,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "controlplane_scheduler_lag_seconds",
+                    "legendFormat": "Lag",
+                    "refId": "A"
+                }
+            ],
+            "title": "Scheduler Lag",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 22
+            },
+            "id": 11,
+            "options": {
+                "showLabels": false,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": true,
+                "enableLogDetails": true
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "elasticsearch",
+                        "uid": "elasticsearch-applogs"
+                    },
+                    "query": "event_type:POLICY_*",
+                    "refId": "A"
+                }
+            ],
+            "title": "Policy Logs (Drill Down)",
+            "type": "logs"
+        }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 38,
+    "tags": [
+        "controlplane",
+        "policy"
+    ],
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "title": "Policy Engine",
+    "uid": "policy-engine",
+    "version": 1
+}

@@ -1,9 +1,47 @@
 apiVersion: 1
 
 datasources:
+  # Prometheus for metrics
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+
+  # Elasticsearch for logs
+  - name: Elasticsearch-AppLogs
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: "application-logs-*"
+    editable: false
+    jsonData:
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+      logMessageField: message
+      logLevelField: log.level
+
+  - name: Elasticsearch-ChaosEvents
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: "chaos-events-*"
+    editable: false
+    jsonData:
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+      logMessageField: message
+      logLevelField: log.level
+
+  # Alertmanager
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus

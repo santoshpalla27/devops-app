@@ -1,0 +1,137 @@
+# ==================== SLO Burn Rate Alerting ====================
+# Alerts fire on error budget burn, not on every error
+# Includes runbook + dashboard links per requirement
+
+groups:
+  # ==================== API Availability (SLO: 99.9%) ====================
+  - name: slo_availability
+    rules:
+      # Critical: Burning through 30-day budget in 2 hours (14.4x burn rate)
+      - alert: AvailabilityBurnCritical
+        expr: |
+          (
+            1 - (sum(rate(controlplane_http_requests_total{status="success"}[1h])) / sum(rate(controlplane_http_requests_total[1h])))
+          ) > (14.4 * 0.001)
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          team: platform
+        annotations:
+          summary: "API availability SLO critical burn rate"
+          description: "Error rate {{ $value | humanizePercentage }} is burning 14.4x the error budget. At this rate, 30-day budget exhausted in 2 hours."
+          runbook_url: "https://runbooks.controlplane.io/alerts/availability-burn-critical"
+          dashboard_url: "http://localhost:3001/d/controlplane-health?orgId=1&from=now-1h&to=now"
+          slo_target: "99.9%"
+          error_budget: "43.2 min/month"
+
+      # High: Burning through 30-day budget in 5 hours (6x burn rate)
+      - alert: AvailabilityBurnHigh
+        expr: |
+          (
+            1 - (sum(rate(controlplane_http_requests_total{status="success"}[6h])) / sum(rate(controlplane_http_requests_total[6h])))
+          ) > (6 * 0.001)
+        for: 5m
+        labels:
+          severity: warning
+          slo: availability
+          team: platform
+        annotations:
+          summary: "API availability SLO high burn rate"
+          description: "Error rate {{ $value | humanizePercentage }} is burning 6x the error budget over 6 hours."
+          runbook_url: "https://runbooks.controlplane.io/alerts/availability-burn-high"
+          dashboard_url: "http://localhost:3001/d/controlplane-health?orgId=1&from=now-6h&to=now"
+
+      # Moderate: Burning at normal rate but sustained (ticket, not page)
+      - alert: AvailabilityBurnModerate
+        expr: |
+          (
+            1 - (sum(rate(controlplane_http_requests_total{status="success"}[3d])) / sum(rate(controlplane_http_requests_total[3d])))
+          ) > 0.001
+        for: 1h
+        labels:
+          severity: info
+          slo: availability
+          team: platform
+        annotations:
+          summary: "API availability below SLO target"
+          description: "Sustained degradation detected. File a ticket for investigation."
+          runbook_url: "https://runbooks.controlplane.io/alerts/availability-degraded"
+          dashboard_url: "http://localhost:3001/d/controlplane-health?orgId=1&from=now-3d&to=now"
+
+  # ==================== Chaos Recovery (SLO: 99% within 60s) ====================
+  - name: slo_chaos_recovery
+    rules:
+      # Critical burn rate
+      - alert: RecoveryBurnCritical
+        expr: |
+          (
+            1 - (
+              sum(rate(controlplane_chaos_recovery_total{status="success"}[1h])) 
+              / sum(rate(controlplane_chaos_recovery_total[1h]))
+            )
+          ) > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: critical
+          slo: recovery
+          team: chaos
+        annotations:
+          summary: "Chaos recovery SLO critical burn rate"
+          description: "Recovery failure rate burning 14.4x budget. Immediate investigation required."
+          runbook_url: "https://runbooks.controlplane.io/alerts/recovery-burn-critical"
+          dashboard_url: "http://localhost:3001/d/chaos-engineering?orgId=1&from=now-1h&to=now"
+          slo_target: "99%"
+
+      # Slow recoveries
+      - alert: RecoveryTooSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(controlplane_chaos_recovery_duration_seconds_bucket[1h])) by (le)) > 60
+        for: 5m
+        labels:
+          severity: warning
+          slo: recovery
+          team: chaos
+        annotations:
+          summary: "Chaos recovery P95 exceeds 60 seconds"
+          description: "Recovery time P95 is {{ $value | humanizeDuration }}. Target is 60s."
+          runbook_url: "https://runbooks.controlplane.io/alerts/recovery-slow"
+          dashboard_url: "http://localhost:3001/d/chaos-engineering?orgId=1&from=now-1h&to=now"
+
+  # ==================== Policy Latency (SLO: P95 < 100ms) ====================
+  - name: slo_policy_latency
+    rules:
+      - alert: PolicyLatencyBurn
+        expr: |
+          histogram_quantile(0.95, sum(rate(controlplane_policy_evaluation_duration_seconds_bucket[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+          team: policy
+        annotations:
+          summary: "Policy evaluation latency exceeds SLO"
+          description: "P95 latency {{ $value | humanizeDuration }} exceeds 100ms target."
+          runbook_url: "https://runbooks.controlplane.io/alerts/policy-latency"
+          dashboard_url: "http://localhost:3001/d/policy-engine?orgId=1&from=now-1h&to=now"
+          slo_target: "<100ms P95"
+
+  # ==================== Chaos Annotations (for visibility) ====================
+  - name: chaos_annotations
+    rules:
+      # Record rule for chaos periods (for Grafana annotations)
+      - record: controlplane:chaos:active
+        expr: controlplane_chaos_active_experiments > 0
+
+      # Alert when chaos experiment stuck (not an SLO, but actionable)
+      - alert: ChaosExperimentStuck
+        expr: controlplane_chaos_active_experiments > 0
+        for: 30m
+        labels:
+          severity: warning
+          team: chaos
+        annotations:
+          summary: "Chaos experiment running for > 30 minutes"
+          description: "{{ $value }} experiment(s) active. Check if recovery failed."
+          runbook_url: "https://runbooks.controlplane.io/alerts/experiment-stuck"
+          dashboard_url: "http://localhost:3001/d/chaos-engineering?orgId=1"

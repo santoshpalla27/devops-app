@@ -1,32 +1,59 @@
 package com.platform.controlplane.chaos;
 
+import com.platform.controlplane.chaos.toxiproxy.ToxiproxyClient;
 import com.platform.controlplane.connectors.redis.RedisConnector;
+import com.platform.controlplane.observability.MetricsRegistry;
 import com.platform.controlplane.state.SystemState;
 import com.platform.controlplane.state.SystemStateMachine;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Fault injector for Redis systems.
+ * 
+ * Uses Toxiproxy for network-level fault injection when available.
+ * Falls back to application-level injection for latency when Toxiproxy is unavailable.
+ * 
+ * REAL IMPLEMENTATIONS ONLY - no logging-only simulations.
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RedisFaultInjector implements FaultInjector {
+    
+    private static final String SYSTEM_TYPE = "redis";
+    private static final String PROXY_NAME = "redis-proxy";
     
     private final RedisConnector redisConnector;
     private final SystemStateMachine stateMachine;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final ToxiproxyClient toxiproxyClient;
+    private final MetricsRegistry metricsRegistry;
     
     // Track active faults
     private final Map<String, ChaosExperiment> activeFaults = new ConcurrentHashMap<>();
+    
+    // Fallback: Application-level latency injection
+    private final AtomicBoolean latencyInjectionActive = new AtomicBoolean(false);
+    private final AtomicInteger injectedLatencyMs = new AtomicInteger(0);
+    
+    // Partial failure tracking
+    private final AtomicBoolean partialFailureActive = new AtomicBoolean(false);
+    private final AtomicInteger failureRatePercent = new AtomicInteger(0);
+    
+    public RedisFaultInjector(
+            RedisConnector redisConnector,
+            SystemStateMachine stateMachine,
+            ToxiproxyClient toxiproxyClient,
+            MetricsRegistry metricsRegistry) {
+        this.redisConnector = redisConnector;
+        this.stateMachine = stateMachine;
+        this.toxiproxyClient = toxiproxyClient;
+        this.metricsRegistry = metricsRegistry;
+    }
     
     @Override
     public boolean injectFault(ChaosExperiment experiment) {
@@ -35,28 +62,17 @@ public class RedisFaultInjector implements FaultInjector {
         try {
             boolean success = switch (experiment.getFaultType()) {
                 case CONNECTION_LOSS -> injectConnectionLoss(experiment);
-                case CIRCUIT_BREAKER_FORCE_OPEN -> injectCircuitOpen(experiment);
                 case LATENCY_INJECTION -> injectLatency(experiment);
                 case PARTIAL_FAILURE -> injectPartialFailure(experiment);
                 case TIMEOUT -> injectTimeout(experiment);
                 case NETWORK_PARTITION -> injectNetworkPartition(experiment);
-                default -> {
-                    log.warn("Unsupported fault type for Redis: {}", experiment.getFaultType());
-                    yield false;
-                }
             };
             
             if (success) {
                 activeFaults.put(experiment.getId(), experiment);
-                
-                // Schedule auto-recovery if duration is set
-                if (experiment.getDurationSeconds() > 0) {
-                    scheduler.schedule(
-                        () -> recoverFromFault(experiment.getId()),
-                        experiment.getDurationSeconds(),
-                        TimeUnit.SECONDS
-                    );
-                }
+                metricsRegistry.incrementCounter("chaos.fault.injected",
+                    "system", SYSTEM_TYPE,
+                    "type", experiment.getFaultType().toString());
             }
             
             return success;
@@ -79,14 +95,18 @@ public class RedisFaultInjector implements FaultInjector {
         
         try {
             boolean success = switch (experiment.getFaultType()) {
-                case CONNECTION_LOSS -> recoverConnectionLoss();
-                case CIRCUIT_BREAKER_FORCE_OPEN -> recoverCircuitOpen();
-                case LATENCY_INJECTION, PARTIAL_FAILURE, TIMEOUT, NETWORK_PARTITION -> recoverGeneric();
-                default -> true;
+                case CONNECTION_LOSS -> recoverConnectionLoss(experimentId);
+                case LATENCY_INJECTION -> recoverLatency(experimentId);
+                case PARTIAL_FAILURE -> recoverPartialFailure(experimentId);
+                case TIMEOUT -> recoverTimeout(experimentId);
+                case NETWORK_PARTITION -> recoverNetworkPartition(experimentId);
             };
             
             if (success) {
                 activeFaults.remove(experimentId);
+                metricsRegistry.incrementCounter("chaos.fault.recovered",
+                    "system", SYSTEM_TYPE,
+                    "type", experiment.getFaultType().toString());
             }
             
             return success;
@@ -104,68 +124,239 @@ public class RedisFaultInjector implements FaultInjector {
     
     @Override
     public String getSystemType() {
-        return "redis";
+        return SYSTEM_TYPE;
     }
     
-    // Fault injection implementations
+    // ==================== CONNECTION_LOSS ====================
     
     private boolean injectConnectionLoss(ChaosExperiment experiment) {
-        log.info("Simulating Redis connection loss");
+        log.info("Injecting Redis CONNECTION_LOSS: disconnecting and disabling proxy");
+        
+        // Disconnect the connector
         redisConnector.disconnect();
-        stateMachine.transition("redis", SystemState.DISCONNECTED,
+        
+        // Disable Toxiproxy if available
+        if (toxiproxyClient.isAvailable()) {
+            toxiproxyClient.disableProxy(PROXY_NAME);
+        }
+        
+        // Update state
+        stateMachine.transition(SYSTEM_TYPE, SystemState.DISCONNECTED,
             "Chaos experiment: " + experiment.getName());
+        
         return true;
     }
     
-    private boolean recoverConnectionLoss() {
-        log.info("Recovering Redis connection");
-        return redisConnector.reconnect();
+    private boolean recoverConnectionLoss(String experimentId) {
+        log.info("Recovering from Redis CONNECTION_LOSS");
+        
+        // Re-enable proxy
+        if (toxiproxyClient.isAvailable()) {
+            toxiproxyClient.enableProxy(PROXY_NAME);
+        }
+        
+        // Reconnect
+        boolean success = redisConnector.reconnect();
+        
+        if (success) {
+            stateMachine.transition(SYSTEM_TYPE, SystemState.CONNECTED, "Chaos recovery");
+        }
+        
+        return success;
     }
     
-    private boolean injectCircuitOpen(ChaosExperiment experiment) {
-        log.info("Forcing Redis circuit breaker open");
-        stateMachine.transition("redis", SystemState.CIRCUIT_OPEN,
-            "Chaos experiment: " + experiment.getName());
-        return true;
-    }
-    
-    private boolean recoverCircuitOpen() {
-        log.info("Recovering Redis circuit breaker");
-        stateMachine.transition("redis", SystemState.RECOVERING,
-            "Chaos experiment recovery");
-        return true;
-    }
+    // ==================== LATENCY_INJECTION ====================
     
     private boolean injectLatency(ChaosExperiment experiment) {
-        log.info("Simulating Redis latency");
-        stateMachine.transition("redis", SystemState.DEGRADED,
-            "Chaos experiment: latency injection");
+        int latencyMs = experiment.getLatencyMs() != null
+            ? experiment.getLatencyMs().intValue()
+            : 1000; // Default 1 second latency for Redis (faster system)
+        
+        int jitter = latencyMs / 10; // 10% jitter
+        
+        if (toxiproxyClient.isAvailable()) {
+            // Use Toxiproxy for real network-level latency
+            String toxicName = "exp-" + experiment.getId() + "-latency";
+            boolean success = toxiproxyClient.addLatencyToxic(PROXY_NAME, toxicName, latencyMs, jitter);
+            
+            if (success) {
+                log.info("Injected REAL network latency: {}ms (±{}ms jitter) via Toxiproxy", latencyMs, jitter);
+                stateMachine.transition(SYSTEM_TYPE, SystemState.DEGRADED,
+                    "Chaos: " + latencyMs + "ms latency injection");
+                return true;
+            }
+        }
+        
+        // Fallback: Application-level latency
+        log.warn("Toxiproxy unavailable, using application-level latency injection");
+        latencyInjectionActive.set(true);
+        injectedLatencyMs.set(latencyMs);
+        
+        stateMachine.transition(SYSTEM_TYPE, SystemState.DEGRADED,
+            "Chaos: " + latencyMs + "ms latency (app-level)");
+        
         return true;
     }
+    
+    private boolean recoverLatency(String experimentId) {
+        log.info("Recovering from Redis LATENCY_INJECTION");
+        
+        // Remove Toxiproxy toxic
+        if (toxiproxyClient.isAvailable()) {
+            String toxicName = "exp-" + experimentId + "-latency";
+            toxiproxyClient.removeToxic(PROXY_NAME, toxicName);
+        }
+        
+        // Clear application-level latency
+        latencyInjectionActive.set(false);
+        injectedLatencyMs.set(0);
+        
+        return true;
+    }
+    
+    // ==================== PARTIAL_FAILURE ====================
     
     private boolean injectPartialFailure(ChaosExperiment experiment) {
-        log.info("Simulating Redis partial failure");
-        stateMachine.transition("redis", SystemState.DEGRADED,
-            "Chaos experiment: partial failures");
+        int rate = experiment.getFailureRatePercent() != null
+            ? experiment.getFailureRatePercent()
+            : 50;
+        
+        log.info("Injecting PARTIAL_FAILURE: {}% of requests will fail", rate);
+        
+        partialFailureActive.set(true);
+        failureRatePercent.set(rate);
+        
+        stateMachine.transition(SYSTEM_TYPE, SystemState.DEGRADED,
+            "Chaos: " + rate + "% partial failure");
+        
         return true;
     }
+    
+    private boolean recoverPartialFailure(String experimentId) {
+        log.info("Recovering from Redis PARTIAL_FAILURE");
+        
+        partialFailureActive.set(false);
+        failureRatePercent.set(0);
+        
+        return true;
+    }
+    
+    // ==================== TIMEOUT ====================
     
     private boolean injectTimeout(ChaosExperiment experiment) {
-        log.info("Simulating Redis timeouts");
-        stateMachine.transition("redis", SystemState.DEGRADED,
-            "Chaos experiment: timeouts");
-        return true;
+        if (!toxiproxyClient.isAvailable()) {
+            log.error("Cannot inject TIMEOUT: Toxiproxy is required but not available");
+            return false;
+        }
+        
+        String toxicName = "exp-" + experiment.getId() + "-timeout";
+        boolean success = toxiproxyClient.addTimeoutToxic(PROXY_NAME, toxicName, 100);
+        
+        if (success) {
+            log.info("Injected TIMEOUT fault via Toxiproxy - all commands will hang and fail");
+            stateMachine.transition(SYSTEM_TYPE, SystemState.DEGRADED,
+                "Chaos: timeout injection");
+        }
+        
+        return success;
     }
+    
+    private boolean recoverTimeout(String experimentId) {
+        log.info("Recovering from Redis TIMEOUT");
+        
+        String toxicName = "exp-" + experimentId + "-timeout";
+        boolean success = toxiproxyClient.removeToxic(PROXY_NAME, toxicName);
+        
+        // Force reconnect
+        redisConnector.reconnect();
+        
+        return success;
+    }
+    
+    // ==================== NETWORK_PARTITION ====================
     
     private boolean injectNetworkPartition(ChaosExperiment experiment) {
-        log.info("Simulating Redis network partition");
-        stateMachine.transition("redis", SystemState.DEGRADED,
-            "Chaos experiment: network partition");
-        return true;
+        if (!toxiproxyClient.isAvailable()) {
+            log.error("Cannot inject NETWORK_PARTITION: Toxiproxy is required but not available");
+            return false;
+        }
+        
+        String toxicName = "exp-" + experiment.getId() + "-reset";
+        boolean success = toxiproxyClient.addResetPeerToxic(PROXY_NAME, toxicName, 0);
+        
+        if (success) {
+            log.info("Injected NETWORK_PARTITION fault - all connections will receive TCP RST");
+            redisConnector.disconnect();
+            stateMachine.transition(SYSTEM_TYPE, SystemState.DISCONNECTED,
+                "Chaos: network partition");
+        }
+        
+        return success;
     }
     
-    private boolean recoverGeneric() {
-        log.info("Recovering Redis from experiment");
-        return redisConnector.reconnect();
+    private boolean recoverNetworkPartition(String experimentId) {
+        log.info("Recovering from Redis NETWORK_PARTITION");
+        
+        String toxicName = "exp-" + experimentId + "-reset";
+        toxiproxyClient.removeToxic(PROXY_NAME, toxicName);
+        
+        boolean success = redisConnector.reconnect();
+        
+        if (success) {
+            stateMachine.transition(SYSTEM_TYPE, SystemState.CONNECTED, "Chaos recovery");
+        }
+        
+        return success;
+    }
+    
+    // ==================== Application-Level Hooks ====================
+    
+    /**
+     * Called before executing Redis commands.
+     * Implements application-level chaos when Toxiproxy is unavailable.
+     */
+    public void beforeCommand() {
+        // Application-level latency
+        if (latencyInjectionActive.get()) {
+            int delayMs = injectedLatencyMs.get();
+            log.debug("Injecting app-level latency: {}ms", delayMs);
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        // Partial failure check
+        if (partialFailureActive.get()) {
+            int rate = failureRatePercent.get();
+            if (Math.random() * 100 < rate) {
+                log.debug("Partial failure triggered ({}% rate)", rate);
+                throw new ChaosInducedFailureException("Chaos: partial failure injection");
+            }
+        }
+    }
+    
+    /**
+     * Check if latency injection is active.
+     */
+    public boolean isLatencyInjectionActive() {
+        return latencyInjectionActive.get() ||
+               activeFaults.values().stream()
+                   .anyMatch(e -> e.getFaultType() == FaultType.LATENCY_INJECTION);
+    }
+    
+    /**
+     * Check if partial failure is active.
+     */
+    public boolean isPartialFailureActive() {
+        return partialFailureActive.get();
+    }
+    
+    /**
+     * Get current failure rate.
+     */
+    public int getFailureRatePercent() {
+        return failureRatePercent.get();
     }
 }

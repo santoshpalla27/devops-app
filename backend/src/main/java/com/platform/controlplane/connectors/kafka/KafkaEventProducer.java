@@ -1,95 +1,96 @@
 package com.platform.controlplane.connectors.kafka;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.platform.controlplane.contract.ContractRegistry;
-import com.platform.controlplane.contract.ContractViolation;
 import com.platform.controlplane.model.FailureEvent;
 import com.platform.controlplane.observability.MetricsRegistry;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
+import com.platform.controlplane.persistence.entity.EventOutboxEntity;
+import com.platform.controlplane.persistence.repository.EventOutboxRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Kafka event producer for emitting control plane events.
- * Supports async publishing with retries and circuit breaker.
+ * Kafka event producer implementing the transactional outbox pattern.
+ * 
+ * Events are persisted to the database first (event_outbox table),
+ * then dispatched to Kafka by the EventDispatcherService.
+ * 
+ * This ensures:
+ * - Events survive application restarts
+ * - Kafka outages don't lose events
+ * - Delivery is eventually guaranteed (or DLQ'd)
  */
 @Slf4j
 @Component
 public class KafkaEventProducer {
     
-    private final KafkaTemplate<String, FailureEvent> kafkaTemplate;
+    private final EventOutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
     private final MetricsRegistry metricsRegistry;
     private final ContractRegistry contractRegistry;
-    private final ConcurrentLinkedQueue<FailureEvent> eventQueue;
-    private final AtomicBoolean isKafkaAvailable;
     
-    @Value("${controlplane.kafka.event-topic:controlplane-events}")
-    private String eventTopic;
+    @Value("${controlplane.kafka.dispatcher.max-retries:5}")
+    private int maxRetries;
     
     public KafkaEventProducer(
-            KafkaTemplate<String, FailureEvent> kafkaTemplate,
+            EventOutboxRepository outboxRepository,
+            ObjectMapper objectMapper,
             MetricsRegistry metricsRegistry,
             ContractRegistry contractRegistry) {
-        this.kafkaTemplate = kafkaTemplate;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
         this.metricsRegistry = metricsRegistry;
         this.contractRegistry = contractRegistry;
-        this.eventQueue = new ConcurrentLinkedQueue<>();
-        this.isKafkaAvailable = new AtomicBoolean(true);
-        log.info("Kafka event producer initialized");
+        log.info("Kafka event producer initialized (outbox pattern)");
     }
     
     /**
-     * Emit a failure event asynchronously.
+     * Emit a failure event.
+     * Event is persisted to outbox for reliable delivery.
      */
-    @CircuitBreaker(name = "kafka", fallbackMethod = "publishFallback")
-    @Retry(name = "kafka")
+    @Transactional
     public CompletableFuture<Boolean> emit(FailureEvent event) {
         log.info("Emitting event: {} for system {}", event.eventType(), event.system());
         
-        long startTime = System.currentTimeMillis();
-        
-        CompletableFuture<SendResult<String, FailureEvent>> future = 
-            kafkaTemplate.send(eventTopic, event.system(), event);
-        
-        return future.thenApply(result -> {
-            long latency = System.currentTimeMillis() - startTime;
-            metricsRegistry.recordLatency("kafka", "publish", latency);
-            metricsRegistry.incrementCounter("kafka.events.published");
-            log.debug("Event published successfully in {}ms: {}", latency, event.eventId());
-            isKafkaAvailable.set(true);
-            return true;
-        }).exceptionally(ex -> {
-            log.error("Failed to publish event: {}", ex.getMessage());
-            metricsRegistry.incrementCounter("kafka.events.failed");
-            return false;
-        });
-    }
-    
-    @SuppressWarnings("unused")
-    private CompletableFuture<Boolean> publishFallback(FailureEvent event, Exception e) {
-        log.warn("Kafka circuit breaker open, queuing event: {}", event.eventId());
-        eventQueue.offer(event);
-        metricsRegistry.incrementCounter("kafka.events.queued");
-        metricsRegistry.incrementCounter("kafka.events.dropped", "reason", "circuit_open");
-        isKafkaAvailable.set(false);
-        
-        // Record contract violation - events dropped per contract
-        contractRegistry.recordViolation(
-            ContractViolation.create(
-                "kafka-events",
-                "EVENT_DROPPED",
-                String.format("Event %s dropped due to circuit breaker", event.eventId())
-            )
-        );
-        
-        return CompletableFuture.completedFuture(false);
+        try {
+            // Check for duplicate (idempotency)
+            if (outboxRepository.existsByEventId(event.eventId())) {
+                log.warn("Duplicate event detected, skipping: {}", event.eventId());
+                metricsRegistry.incrementCounter("kafka.events.duplicate");
+                return CompletableFuture.completedFuture(true);
+            }
+            
+            // Serialize event to JSON
+            String payload = objectMapper.writeValueAsString(event);
+            
+            // Create outbox entry
+            EventOutboxEntity outboxEntry = EventOutboxEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .eventId(event.eventId())
+                .eventType(event.eventType().name())
+                .systemType(event.system())
+                .payload(payload)
+                .maxRetries(maxRetries)
+                .build();
+            
+            outboxRepository.save(outboxEntry);
+            
+            metricsRegistry.incrementCounter("kafka.events.queued");
+            log.debug("Event {} persisted to outbox for dispatch", event.eventId());
+            
+            return CompletableFuture.completedFuture(true);
+            
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize event: {}", e.getMessage());
+            metricsRegistry.incrementCounter("kafka.events.failed", "reason", "serialization");
+            return CompletableFuture.completedFuture(false);
+        }
     }
     
     /**
@@ -193,38 +194,16 @@ public class KafkaEventProducer {
     }
     
     /**
-     * Process queued events when Kafka becomes available.
+     * Get count of pending events in outbox.
      */
-    public void processQueuedEvents() {
-        if (!isKafkaAvailable.get() || eventQueue.isEmpty()) {
-            return;
-        }
-        
-        log.info("Processing {} queued events", eventQueue.size());
-        
-        FailureEvent event;
-        while ((event = eventQueue.poll()) != null) {
-            try {
-                emit(event).join();
-            } catch (Exception e) {
-                log.warn("Failed to process queued event, re-queuing: {}", e.getMessage());
-                eventQueue.offer(event);
-                break;
-            }
-        }
+    public long getPendingEventCount() {
+        return outboxRepository.countByStatus(EventOutboxEntity.OutboxStatus.PENDING);
     }
     
     /**
-     * Get count of queued events.
+     * Get count of DLQ'd events.
      */
-    public int getQueuedEventCount() {
-        return eventQueue.size();
-    }
-    
-    /**
-     * Check if Kafka is available.
-     */
-    public boolean isKafkaAvailable() {
-        return isKafkaAvailable.get();
+    public long getDlqEventCount() {
+        return outboxRepository.countByStatus(EventOutboxEntity.OutboxStatus.DLQ);
     }
 }

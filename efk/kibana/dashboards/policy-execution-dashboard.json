@@ -1,0 +1,33 @@
+{
+    "attributes": {
+        "title": "Policy Execution Dashboard",
+        "description": "Operator dashboard for monitoring policy triggers and effectiveness. Answer: Are policies firing correctly and taking appropriate actions?",
+        "panelsJSON": "[{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":0,\"w\":16,\"h\":6,\"i\":\"1\"},\"panelIndex\":\"1\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Policy Trigger Rate\",\"description\":\"How often are policies triggering?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"area\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"@timestamp\",\"seriesType\":\"area\"}]},\"query\":{\"query\":\"event_type: POLICY_TRIGGERED\",\"language\":\"kuery\"}}}},\"title\":\"Policy Trigger Rate\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":16,\"y\":0,\"w\":16,\"h\":6,\"i\":\"2\"},\"panelIndex\":\"2\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Success vs Failure\",\"description\":\"Policy action outcomes\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar_stacked\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"@timestamp\",\"splitAccessor\":\"success\"}]},\"query\":{\"query\":\"event_type: POLICY_ACTION_EXECUTED\",\"language\":\"kuery\"}}}},\"title\":\"Success vs Failure\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":32,\"y\":0,\"w\":16,\"h\":6,\"i\":\"3\"},\"panelIndex\":\"3\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Actions by Type\",\"description\":\"Which actions are being executed?\",\"visualizationType\":\"lnsPie\",\"state\":{\"visualization\":{\"shape\":\"donut\",\"layers\":[{\"layerId\":\"layer1\",\"primaryGroups\":[\"action\"],\"metrics\":[\"count\"]}]},\"query\":{\"query\":\"event_type: POLICY_ACTION_EXECUTED\",\"language\":\"kuery\"}}}},\"title\":\"Actions by Type\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":6,\"w\":24,\"h\":6,\"i\":\"4\"},\"panelIndex\":\"4\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Policy Triggers by System\",\"description\":\"Which systems trigger policies most?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar_horizontal\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"system_type\"}]},\"query\":{\"query\":\"event_type: POLICY_TRIGGERED\",\"language\":\"kuery\"}}}},\"title\":\"Policy Triggers by System\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":24,\"y\":6,\"w\":24,\"h\":6,\"i\":\"5\"},\"panelIndex\":\"5\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Failed Policy Actions\",\"description\":\"Which policy actions are failing?\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"policy_id\"},{\"columnId\":\"action\"},{\"columnId\":\"system_type\"},{\"columnId\":\"error_code\"},{\"columnId\":\"error_message\"}]},\"query\":{\"query\":\"event_type: POLICY_ACTION_EXECUTED AND success: false\",\"language\":\"kuery\"}}}},\"title\":\"Failed Policy Actions\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":12,\"w\":24,\"h\":6,\"i\":\"6\"},\"panelIndex\":\"6\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Action Execution Time\",\"description\":\"How long do actions take?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"duration_ms\"],\"xAccessor\":\"action\"}]},\"query\":{\"query\":\"event_type: POLICY_ACTION_EXECUTED\",\"language\":\"kuery\"}}}},\"title\":\"Action Execution Time\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":24,\"y\":12,\"w\":24,\"h\":6,\"i\":\"7\"},\"panelIndex\":\"7\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Policy Evaluation Summary\",\"description\":\"Overview of policy evaluations\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"system_type\"},{\"columnId\":\"policies_evaluated\"},{\"columnId\":\"policies_triggered\"}]},\"query\":{\"query\":\"event_type: POLICY_EVALUATION_COMPLETED\",\"language\":\"kuery\"}}}},\"title\":\"Policy Evaluation Summary\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":18,\"w\":48,\"h\":8,\"i\":\"8\"},\"panelIndex\":\"8\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Recent Policy Activity\",\"description\":\"All policy events for investigation\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"event_type\"},{\"columnId\":\"policy_id\"},{\"columnId\":\"system_type\"},{\"columnId\":\"action\"},{\"columnId\":\"success\"},{\"columnId\":\"trace_id\"}]},\"query\":{\"query\":\"event_type: POLICY_*\",\"language\":\"kuery\"}}}},\"title\":\"Recent Policy Activity\"}]",
+        "optionsJSON": "{\"useMargins\":true,\"syncColors\":false,\"syncCursor\":true,\"syncTooltips\":false,\"hidePanelTitles\":false}",
+        "timeRestore": true,
+        "timeTo": "now",
+        "timeFrom": "now-24h",
+        "refreshInterval": {
+            "pause": false,
+            "value": 30000
+        },
+        "kibanaSavedObjectMeta": {
+            "searchSourceJSON": "{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+        }
+    },
+    "coreMigrationVersion": "8.8.0",
+    "created_at": "2026-01-07T12:00:00.000Z",
+    "id": "policy-execution-dashboard",
+    "managed": false,
+    "references": [
+        {
+            "id": "audit-logs-index-pattern",
+            "name": "indexpattern-datasource-layer-layer1",
+            "type": "index-pattern"
+        }
+    ],
+    "type": "dashboard",
+    "typeMigrationVersion": "8.9.0",
+    "updated_at": "2026-01-07T12:00:00.000Z",
+    "version": "WzYsMV0="
+}

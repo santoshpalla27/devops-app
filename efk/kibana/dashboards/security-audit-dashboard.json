@@ -1,0 +1,43 @@
+{
+    "attributes": {
+        "title": "Security & Audit Dashboard",
+        "description": "Operator dashboard for security investigation. Answer: Who did what, when, and from where?",
+        "panelsJSON": "[{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":0,\"w\":16,\"h\":6,\"i\":\"1\"},\"panelIndex\":\"1\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Chaos Triggers by Actor\",\"description\":\"Who is triggering chaos experiments?\",\"visualizationType\":\"lnsPie\",\"state\":{\"visualization\":{\"shape\":\"donut\",\"layers\":[{\"layerId\":\"layer1\",\"primaryGroups\":[\"actor\"],\"metrics\":[\"count\"]}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_STARTED\",\"language\":\"kuery\"}}}},\"title\":\"Chaos Triggers by Actor\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":16,\"y\":0,\"w\":16,\"h\":6,\"i\":\"2\"},\"panelIndex\":\"2\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Activity Timeline\",\"description\":\"When are experiments being run?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar_stacked\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"@timestamp\",\"splitAccessor\":\"actor\"}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_STARTED OR event_type: POLICY_CREATED OR event_type: POLICY_UPDATED\",\"language\":\"kuery\"}}}},\"title\":\"Activity Timeline\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":32,\"y\":0,\"w\":16,\"h\":6,\"i\":\"3\"},\"panelIndex\":\"3\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Rate Limit Violations\",\"description\":\"Who is being rate limited?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"@timestamp\",\"splitAccessor\":\"client_ip\"}]},\"query\":{\"query\":\"event_type: SECURITY_RATE_LIMITED\",\"language\":\"kuery\"}}}},\"title\":\"Rate Limit Violations\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":6,\"w\":24,\"h\":6,\"i\":\"4\"},\"panelIndex\":\"4\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Requests by IP\",\"description\":\"Where are requests coming from?\",\"visualizationType\":\"lnsXY\",\"state\":{\"visualization\":{\"preferredSeriesType\":\"bar_horizontal\",\"layers\":[{\"layerId\":\"layer1\",\"accessors\":[\"count\"],\"xAccessor\":\"client_ip\"}]},\"query\":{\"query\":\"client_ip: *\",\"language\":\"kuery\"}}}},\"title\":\"Requests by IP\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":24,\"y\":6,\"w\":24,\"h\":6,\"i\":\"5\"},\"panelIndex\":\"5\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Validation Failures\",\"description\":\"What inputs are being rejected?\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"client_ip\"},{\"columnId\":\"path\"},{\"columnId\":\"field\"},{\"columnId\":\"message\"}]},\"query\":{\"query\":\"event_type: SECURITY_VALIDATION_FAILED\",\"language\":\"kuery\"}}}},\"title\":\"Validation Failures\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":12,\"w\":24,\"h\":6,\"i\":\"6\"},\"panelIndex\":\"6\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Policy Changes\",\"description\":\"Who modified policies?\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"event_type\"},{\"columnId\":\"actor\"},{\"columnId\":\"resource_id\"},{\"columnId\":\"client_ip\"}]},\"query\":{\"query\":\"event_type: POLICY_CREATED OR event_type: POLICY_UPDATED OR event_type: POLICY_DELETED\",\"language\":\"kuery\"}}}},\"title\":\"Policy Changes\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":24,\"y\":12,\"w\":24,\"h\":6,\"i\":\"7\"},\"panelIndex\":\"7\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Chaos Experiments Audit\",\"description\":\"All chaos experiment changes\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"event_type\"},{\"columnId\":\"actor\"},{\"columnId\":\"chaos_experiment_id\"},{\"columnId\":\"system_type\"},{\"columnId\":\"fault_type\"}]},\"query\":{\"query\":\"event_type: CHAOS_INJECTION_STARTED OR event_type: CHAOS_RECOVERY_STARTED\",\"language\":\"kuery\"}}}},\"title\":\"Chaos Experiments Audit\"},{\"version\":\"8.11.0\",\"type\":\"lens\",\"gridData\":{\"x\":0,\"y\":18,\"w\":48,\"h\":10,\"i\":\"8\"},\"panelIndex\":\"8\",\"embeddableConfig\":{\"attributes\":{\"title\":\"Full Security Audit Log\",\"description\":\"Complete audit trail for investigation\",\"visualizationType\":\"lnsDatatable\",\"state\":{\"visualization\":{\"columns\":[{\"columnId\":\"@timestamp\"},{\"columnId\":\"event_type\"},{\"columnId\":\"actor\"},{\"columnId\":\"action\"},{\"columnId\":\"resource_type\"},{\"columnId\":\"resource_id\"},{\"columnId\":\"client_ip\"},{\"columnId\":\"success\"},{\"columnId\":\"trace_id\"}]},\"query\":{\"query\":\"event_type: SECURITY_* OR event_type: POLICY_* OR event_type: CHAOS_INJECTION_STARTED\",\"language\":\"kuery\"}}}},\"title\":\"Full Security Audit Log\"}]",
+        "optionsJSON": "{\"useMargins\":true,\"syncColors\":false,\"syncCursor\":true,\"syncTooltips\":false,\"hidePanelTitles\":false}",
+        "timeRestore": true,
+        "timeTo": "now",
+        "timeFrom": "now-24h",
+        "refreshInterval": {
+            "pause": false,
+            "value": 30000
+        },
+        "kibanaSavedObjectMeta": {
+            "searchSourceJSON": "{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+        }
+    },
+    "coreMigrationVersion": "8.8.0",
+    "created_at": "2026-01-07T12:00:00.000Z",
+    "id": "security-audit-dashboard",
+    "managed": false,
+    "references": [
+        {
+            "id": "security-events-index-pattern",
+            "name": "indexpattern-datasource-layer-layer1",
+            "type": "index-pattern"
+        },
+        {
+            "id": "audit-logs-index-pattern",
+            "name": "indexpattern-datasource-layer-layer2",
+            "type": "index-pattern"
+        },
+        {
+            "id": "chaos-events-index-pattern",
+            "name": "indexpattern-datasource-layer-layer3",
+            "type": "index-pattern"
+        }
+    ],
+    "type": "dashboard",
+    "typeMigrationVersion": "8.9.0",
+    "updated_at": "2026-01-07T12:00:00.000Z",
+    "version": "WzcsMV0="
+}

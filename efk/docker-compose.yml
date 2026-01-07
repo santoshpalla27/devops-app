@@ -1,0 +1,157 @@
+services:
+  # ==================== Elasticsearch ====================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-8.11.0}
+    container_name: efk-elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=${ELASTIC_CLUSTER_NAME:-controlplane-logs}
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms512m -Xmx512m}"
+      # Disk watermarks
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=85%
+      - cluster.routing.allocation.disk.watermark.high=90%
+      - cluster.routing.allocation.disk.watermark.flood_stage=95%
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - efk-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ==================== Bootstrap (runs once) ====================
+  elasticsearch-bootstrap:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-8.11.0}
+    container_name: efk-bootstrap
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    volumes:
+      - ./ilm-policies:/ilm-policies:ro
+      - ./index-templates:/index-templates:ro
+      - ./bootstrap:/bootstrap:ro
+    entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
+    networks:
+      - efk-network
+    restart: "no"
+
+  # ==================== Fluent Bit ====================
+  fluent-bit:
+    image: fluent/fluent-bit:${FLUENT_BIT_VERSION:-2.2.0}
+    container_name: efk-fluent-bit
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./fluent-bit/filters.conf:/fluent-bit/etc/filters.conf:ro
+      # Mount application log directory
+      - ../backend/logs:/var/log/app:ro
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    networks:
+      - efk-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2020/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==================== Kibana ====================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-8.11.0}
+    container_name: efk-kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - XPACK_SECURITY_ENABLED=false
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a]@v9y$B&E)H@McQfTjWnZr4u7x!A%D*
+    ports:
+      - "5601:5601"
+    networks:
+      - efk-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ==================== Validation (optional, for testing) ====================
+  efk-validation:
+    image: curlimages/curl:8.5.0
+    container_name: efk-validation
+    depends_on:
+      elasticsearch-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./bootstrap:/bootstrap:ro
+    entrypoint: ["/bin/sh", "/bootstrap/validate.sh"]
+    networks:
+      - efk-network
+    restart: "no"
+
+networks:
+  efk-network:
+    driver: bridge
+    name: efk-network
+
+volumes:
+  elasticsearch-data:
+    name: efk-elasticsearch-data

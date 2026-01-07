@@ -1,9 +1,10 @@
-package com.platform.controlplane.policy;
+package com.platform.controlplane.api;
 
+import com.platform.controlplane.policy.*;
 import com.platform.controlplane.state.SystemStateContext;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,12 +16,23 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/policies")
-@AllArgsConstructor
 public class PolicyController {
     
     private final PolicyRepository policyRepository;
     private final PolicyEvaluator policyEvaluator;
+    private final PolicySchedulerService policyScheduler;
     private final com.platform.controlplane.state.SystemStateMachine stateMachine;
+    
+    public PolicyController(
+            PolicyRepository policyRepository,
+            PolicyEvaluator policyEvaluator,
+            PolicySchedulerService policyScheduler,
+            com.platform.controlplane.state.SystemStateMachine stateMachine) {
+        this.policyRepository = policyRepository;
+        this.policyEvaluator = policyEvaluator;
+        this.policyScheduler = policyScheduler;
+        this.stateMachine = stateMachine;
+    }
     
     /**
      * Get all policies.
@@ -133,7 +145,7 @@ public class PolicyController {
     }
     
     /**
-     * Get execution history.
+     * Get execution history (audit log).
      */
     @GetMapping("/executions")
     public List<PolicyExecutionRecord> getExecutions(
@@ -149,6 +161,32 @@ public class PolicyController {
     @GetMapping("/debug/state/{systemType}")
     public SystemStateContext getSystemState(@PathVariable String systemType) {
         return stateMachine.getContext(systemType);
+    }
+    
+    // ==================== Scheduler Endpoints ====================
+    
+    /**
+     * Manually trigger evaluation for all systems.
+     */
+    @PostMapping("/scheduler/trigger")
+    public PolicySchedulerService.EvaluationResult triggerEvaluation() {
+        return policyScheduler.triggerManualEvaluation();
+    }
+    
+    /**
+     * Manually trigger evaluation for a specific system.
+     */
+    @PostMapping("/scheduler/trigger/{systemType}")
+    public List<PolicyExecutionRecord> triggerEvaluationForSystem(@PathVariable String systemType) {
+        return policyScheduler.triggerEvaluationForSystem(systemType);
+    }
+    
+    /**
+     * Get scheduler statistics.
+     */
+    @GetMapping("/scheduler/stats")
+    public PolicySchedulerService.SchedulerStats getSchedulerStats() {
+        return policyScheduler.getStats();
     }
     
     private PolicyDTO toDTO(Policy policy) {

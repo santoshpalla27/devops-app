@@ -1,0 +1,377 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": false,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [
+        {
+            "asDropdown": true,
+            "icon": "external link",
+            "includeVars": true,
+            "keepTime": true,
+            "tags": [
+                "controlplane"
+            ],
+            "title": "Related",
+            "type": "dashboards"
+        }
+    ],
+    "panels": [
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "controlplane_chaos_active_experiments",
+                    "legendFormat": "Active",
+                    "refId": "A"
+                }
+            ],
+            "title": "Active Experiments",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 6,
+                "y": 0
+            },
+            "id": 2,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "values": false
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percentunit",
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.01
+                            }
+                        ]
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_chaos_recovery_total{status=\"success\"}[1h])) / sum(rate(controlplane_chaos_recovery_total[1h]))",
+                    "legendFormat": "Success Rate",
+                    "refId": "A"
+                }
+            ],
+            "title": "Recovery Success (SLI)",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 12,
+                "y": 0
+            },
+            "id": 3,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "mean"
+                    ],
+                    "values": false
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_chaos_recovery_duration_seconds_sum[5m])) / sum(rate(controlplane_chaos_recovery_duration_seconds_count[5m]))",
+                    "legendFormat": "MTTR",
+                    "refId": "A"
+                }
+            ],
+            "title": "MTTR (Avg Recovery)",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 3,
+                "w": 6,
+                "x": 18,
+                "y": 0
+            },
+            "id": 4,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(increase(controlplane_chaos_injection_total[24h]))",
+                    "legendFormat": "24h Injections",
+                    "refId": "A"
+                }
+            ],
+            "title": "Injections (24h)",
+            "type": "stat"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 3
+            },
+            "id": 5,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_chaos_injection_total[5m])) by (system_type, fault_type)",
+                    "legendFormat": "{{system_type}}/{{fault_type}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "Injection Rate by Fault Type (Blast Radius)",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 3
+            },
+            "id": 6,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "right"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.50, sum(rate(controlplane_chaos_recovery_duration_seconds_bucket[5m])) by (le, system_type))",
+                    "legendFormat": "{{system_type}} P50",
+                    "refId": "A"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "histogram_quantile(0.95, sum(rate(controlplane_chaos_recovery_duration_seconds_bucket[5m])) by (le, system_type))",
+                    "legendFormat": "{{system_type}} P95",
+                    "refId": "B"
+                }
+            ],
+            "title": "Recovery Time Distribution",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 11
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_chaos_injection_total{status=\"success\"}[5m])) by (system_type)",
+                    "legendFormat": "{{system_type}} success",
+                    "refId": "A"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "sum(rate(controlplane_chaos_injection_total{status=\"failure\"}[5m])) by (system_type)",
+                    "legendFormat": "{{system_type}} failure",
+                    "refId": "B"
+                }
+            ],
+            "title": "Success vs Failure by System",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 11
+            },
+            "id": 8,
+            "options": {
+                "legend": {
+                    "calcs": [],
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "prometheus"
+                    },
+                    "expr": "controlplane_chaos_active_experiments",
+                    "legendFormat": "Active",
+                    "refId": "A"
+                }
+            ],
+            "title": "Active Experiments Over Time",
+            "type": "timeseries"
+        },
+        {
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 19
+            },
+            "id": 9,
+            "options": {
+                "showLabels": false,
+                "showTime": true,
+                "sortOrder": "Descending",
+                "wrapLogMessage": true,
+                "enableLogDetails": true
+            },
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "elasticsearch",
+                        "uid": "elasticsearch-chaosevents"
+                    },
+                    "query": "event_type:CHAOS_*",
+                    "refId": "A"
+                }
+            ],
+            "title": "Chaos Event Logs (Drill Down)",
+            "type": "logs"
+        }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 38,
+    "tags": [
+        "controlplane",
+        "chaos"
+    ],
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "title": "Chaos Engineering",
+    "uid": "chaos-engineering",
+    "version": 1
+}

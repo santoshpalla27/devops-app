@@ -1,49 +1,61 @@
 package com.platform.controlplane.chaos;
 
+import com.platform.controlplane.persistence.EntityMappers;
+import com.platform.controlplane.persistence.entity.ChaosExperimentEntity;
+import com.platform.controlplane.persistence.repository.ChaosExperimentJpaRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Repository for chaos experiments.
+ * Delegates to JPA repository for persistent storage.
  */
 @Component
 public class ChaosRepository {
     
-    private final Map<String, ChaosExperiment> experiments = new ConcurrentHashMap<>();
+    private final ChaosExperimentJpaRepository jpaRepository;
+    private final EntityMappers entityMappers;
+    
+    public ChaosRepository(ChaosExperimentJpaRepository jpaRepository, EntityMappers entityMappers) {
+        this.jpaRepository = jpaRepository;
+        this.entityMappers = entityMappers;
+    }
     
     /**
      * Save experiment.
      */
     public ChaosExperiment save(ChaosExperiment experiment) {
-        experiments.put(experiment.getId(), experiment);
-        return experiment;
+        ChaosExperimentEntity entity = entityMappers.toEntity(experiment);
+        entity = jpaRepository.save(entity);
+        return entityMappers.toDomain(entity);
     }
     
     /**
      * Find experiment by ID.
      */
     public Optional<ChaosExperiment> findById(String id) {
-        return Optional.ofNullable(experiments.get(id));
+        return jpaRepository.findById(id)
+            .map(entityMappers::toDomain);
     }
     
     /**
      * Find all experiments.
      */
     public List<ChaosExperiment> findAll() {
-        return new ArrayList<>(experiments.values());
+        return jpaRepository.findAll().stream()
+            .map(entityMappers::toDomain)
+            .toList();
     }
     
     /**
      * Find active experiments.
      */
     public List<ChaosExperiment> findActive() {
-        return experiments.values().stream()
-            .filter(ChaosExperiment::isActive)
+        return jpaRepository.findByStatus(ChaosExperiment.ExperimentStatus.RUNNING).stream()
+            .map(entityMappers::toDomain)
             .toList();
     }
     
@@ -51,8 +63,8 @@ public class ChaosRepository {
      * Find experiments by system type.
      */
     public List<ChaosExperiment> findBySystemType(String systemType) {
-        return experiments.values().stream()
-            .filter(exp -> exp.getSystemType().equalsIgnoreCase(systemType))
+        return jpaRepository.findBySystemTypeIgnoreCase(systemType).stream()
+            .map(entityMappers::toDomain)
             .toList();
     }
     
@@ -60,6 +72,10 @@ public class ChaosRepository {
      * Delete experiment.
      */
     public boolean deleteById(String id) {
-        return experiments.remove(id) != null;
+        if (jpaRepository.existsById(id)) {
+            jpaRepository.deleteById(id);
+            return true;
+        }
+        return false;
     }
 }

@@ -9,10 +9,18 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   
+  # Flyway Configuration - manages database schema migrations
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+  
   # JPA Configuration
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -202,10 +210,74 @@ controlplane:
   kafka:
     health-check-interval: 15s
     event-topic: controlplane-events
+    dispatcher:
+      enabled: true
+      poll-interval-ms: 5000
+      batch-size: 100
+      max-retries: 5
+      base-backoff-ms: 1000
+      max-backoff-ms: 300000  # 5 minutes
+      stale-threshold-minutes: 5
   websocket:
     allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+  # Policy Scheduler Configuration
+  policy:
+    scheduler:
+      enabled: true
+      interval-ms: 10000  # Evaluate every 10 seconds
+      systems: mysql,redis,kafka
+      max-retries: 3
+  # Chaos Engineering Configuration
+  chaos:
+    toxiproxy:
+      enabled: ${TOXIPROXY_ENABLED:true}
+      host: ${TOXIPROXY_HOST:toxiproxy}
+      api-port: 8474
+      connection-timeout-ms: 5000
+      read-timeout-ms: 10000
+      proxies:
+        mysql:
+          name: mysql-proxy
+          listen-port: 13306
+          upstream: mysql-primary:3306
+        redis:
+          name: redis-proxy
+          listen-port: 16379
+          upstream: redis-master:6379
+  # Lifecycle Configuration
+  lifecycle:
+    drain-period-seconds: 30
+  shutdown:
+    timeout-seconds: 30
+    kafka-flush-timeout-seconds: 10
+  # Security Configuration
+  security:
+    rate-limit:
+      enabled: true
+      chaos:
+        requests-per-minute: 10
+      policy:
+        requests-per-minute: 30
+      global:
+        requests-per-minute: 100
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+      allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+      max-age-seconds: 3600
+      allow-credentials: true
 
-# Logging Configuration
+# OpenTelemetry Configuration
+otel:
+  enabled: ${OTEL_ENABLED:true}
+  service:
+    name: ${OTEL_SERVICE_NAME:devops-control-plane}
+    version: ${OTEL_SERVICE_VERSION:1.0.0}
+  environment: ${OTEL_ENVIRONMENT:development}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+
+# Logging Configuration - trace correlated
 logging:
   level:
     root: INFO
@@ -213,8 +285,9 @@ logging:
     org.springframework.kafka: WARN
     io.lettuce: WARN
     com.zaxxer.hikari: INFO
+    io.opentelemetry: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-}] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [trace_id=%X{trace_id:-} span_id=%X{span_id:-}] [req=%X{request_id:-}] %-5level %logger{36} - %msg%n"
 
 ---
 spring:

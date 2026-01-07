@@ -1,0 +1,103 @@
+{
+    "index_patterns": [
+        "application-logs-*"
+    ],
+    "priority": 100,
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "application-ilm",
+            "index.lifecycle.rollover_alias": "application-logs",
+            "index.mapping.total_fields.limit": 2000,
+            "index.refresh_interval": "5s"
+        },
+        "mappings": {
+            "dynamic": "strict",
+            "properties": {
+                "@timestamp": {
+                    "type": "date",
+                    "format": "strict_date_optional_time||epoch_millis"
+                },
+                "ingest_time": {
+                    "type": "date"
+                },
+                "log": {
+                    "properties": {
+                        "level": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "service": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "environment": {
+                    "type": "keyword"
+                },
+                "event_type": {
+                    "type": "keyword"
+                },
+                "trace_id": {
+                    "type": "keyword"
+                },
+                "span_id": {
+                    "type": "keyword"
+                },
+                "request_id": {
+                    "type": "keyword"
+                },
+                "host": {
+                    "properties": {
+                        "name": {
+                            "type": "keyword"
+                        }
+                    }
+                },
+                "message": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
+                        }
+                    }
+                },
+                "system_type": {
+                    "type": "keyword"
+                },
+                "action": {
+                    "type": "keyword"
+                },
+                "actor": {
+                    "type": "keyword"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "duration_ms": {
+                    "type": "long"
+                },
+                "error_code": {
+                    "type": "keyword"
+                },
+                "error_message": {
+                    "type": "text"
+                },
+                "context": {
+                    "type": "object",
+                    "enabled": true,
+                    "dynamic": true
+                }
+            }
+        }
+    },
+    "_meta": {
+        "description": "Application logs template for control plane",
+        "version": 1
+    }
+}

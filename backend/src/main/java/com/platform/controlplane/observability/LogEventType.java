@@ -1,0 +1,95 @@
+package com.platform.controlplane.observability;
+
+/**
+ * Semantic event types for structured logging.
+ * Every log must use one of these types.
+ */
+public enum LogEventType {
+    
+    // Application lifecycle
+    APP_STARTUP,
+    APP_SHUTDOWN,
+    APP_READY,
+    APP_DRAINING,
+    
+    // HTTP requests
+    HTTP_REQUEST_RECEIVED,
+    HTTP_REQUEST_COMPLETED,
+    HTTP_REQUEST_FAILED,
+    
+    // WebSocket events
+    WS_SESSION_OPENED,
+    WS_SESSION_CLOSED,
+    WS_MESSAGE_RECEIVED,
+    WS_MESSAGE_SENT,
+    WS_ERROR,
+    
+    // Chaos engineering
+    CHAOS_INJECTION_STARTED,
+    CHAOS_INJECTION_COMPLETED,
+    CHAOS_INJECTION_FAILED,
+    CHAOS_RECOVERY_STARTED,
+    CHAOS_RECOVERY_COMPLETED,
+    CHAOS_RECOVERY_FAILED,
+    CHAOS_EXPERIMENT_EXPIRED,
+    
+    // Policy events
+    POLICY_CREATED,
+    POLICY_UPDATED,
+    POLICY_DELETED,
+    POLICY_ENABLED,
+    POLICY_DISABLED,
+    POLICY_EVALUATION_STARTED,
+    POLICY_EVALUATION_COMPLETED,
+    POLICY_TRIGGERED,
+    POLICY_ACTION_EXECUTED,
+    POLICY_ACTION_FAILED,
+    
+    // State machine
+    STATE_TRANSITION,
+    STATE_TRANSITION_INVALID,
+    
+    // Database events
+    DB_QUERY_EXECUTED,
+    DB_CONNECTION_ACQUIRED,
+    DB_CONNECTION_FAILED,
+    DB_MIGRATION_STARTED,
+    DB_MIGRATION_COMPLETED,
+    
+    // Kafka events
+    KAFKA_MESSAGE_PRODUCED,
+    KAFKA_MESSAGE_FAILED,
+    KAFKA_OUTBOX_DISPATCHED,
+    KAFKA_OUTBOX_DLQ,
+    
+    // Connector events
+    CONNECTOR_HEALTH_CHECK,
+    CONNECTOR_RECONNECT,
+    CONNECTOR_CONNECTED,
+    CONNECTOR_DISCONNECTED,
+    
+    // Security events
+    SECURITY_RATE_LIMITED,
+    SECURITY_CORS_REJECTED,
+    SECURITY_VALIDATION_FAILED,
+    SECURITY_AUDIT,
+    
+    // Recovery events
+    RECOVERY_STARTED,
+    RECOVERY_EXPERIMENT_RESUMED,
+    RECOVERY_EXPERIMENT_EXPIRED,
+    RECOVERY_COMPLETED,
+    
+    // Scheduler events
+    SCHEDULER_STARTED,
+    SCHEDULER_CYCLE_COMPLETED,
+    SCHEDULER_STOPPED,
+    
+    // Metrics events
+    METRIC_RECORDED,
+    
+    // Error events
+    ERROR_UNHANDLED,
+    ERROR_VALIDATION,
+    ERROR_SYSTEM
+}
