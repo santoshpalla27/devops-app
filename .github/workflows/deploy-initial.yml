@@ -33,8 +33,8 @@ jobs:
             set -e  # Exit on any error
             echo "=== Initial Deployment Started ==="
             
-            # Clean up old deployment
-            rm -rf ~/devops-app
+            # Clean up old deployment (use sudo for Docker-created files)
+            sudo rm -rf ~/devops-app
             
             # Clone fresh
             cd ~
