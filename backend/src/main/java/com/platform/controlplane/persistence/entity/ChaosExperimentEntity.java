@@ -37,7 +37,7 @@ public class ChaosExperimentEntity {
     private String systemType;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "fault_type", length = 50, nullable = false)
+    @Column(name = "fault_type", columnDefinition = "VARCHAR(50)", nullable = false)
     private FaultType faultType;
     
     @Column(name = "duration_seconds", nullable = false)
@@ -54,7 +54,7 @@ public class ChaosExperimentEntity {
     private String description;
     
     @Enumerated(EnumType.STRING)
-    @Column(length = 50, nullable = false)
+    @Column(name = "status", columnDefinition = "VARCHAR(50)", nullable = false)
     private ExperimentStatus status;
     
     @Column(name = "created_at", nullable = false, updatable = false)
