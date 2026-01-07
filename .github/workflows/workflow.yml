@@ -25,7 +25,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_IP }}
+          key: ${{ secrets.SSH_IP}}
           script: |
             docker compose up -d   
 
@@ -98,7 +98,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_IP }}
+          key: ${{ secrets.SSH_IP }}
           script: |
             # Stop frontend and remove volumes
             docker compose down frontend --volumes --remove-orphans
@@ -157,7 +157,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_IP }}
+          key: ${{ secrets.SSH_IP }}
           script: |
             # Stop backend and remove volumes
             docker compose down backend --volumes --remove-orphans
@@ -193,7 +193,7 @@ jobs:
         with:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
-          key: ${{ secrets.EC2_SSH_IP }}
+          key: ${{ secrets.SSH_IP }}
           script: |
             # Stop and remove containers, networks, volumes
             docker compose down -v --remove-orphans
