@@ -1,0 +1,71 @@
+name: Initial Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: 'Force full rebuild (clears all containers)'
+        required: false
+        default: 'true'
+        type: boolean
+
+# Prevent concurrent deployments
+concurrency:
+  group: deploy-initial
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Initial Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "=== Initial Deployment Started ==="
+            
+            # Clean up old deployment
+            rm -rf ~/devops-app
+            
+            # Clone fresh
+            cd ~
+            git clone https://github.com/santoshpalla27/devops-app.git
+            cd devops-app
+            
+            # Stop and remove all containers
+            docker compose down -v --remove-orphans || true
+            
+            # Clean Docker cache
+            docker system prune -af --volumes
+            docker builder prune -af
+            
+            # Build and start all services
+            docker compose build --no-cache
+            docker compose up -d
+            
+            # Create deployment marker
+            echo "$(date -Iseconds)" > ~/.deploy-initialized
+            
+            echo "=== Initial Deployment Complete ==="
+            docker ps
+
+      - name: Verify Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_IP }}
+          username: ec2-user
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Wait for services to be healthy
+            sleep 10
+            docker ps
+            
+            # Check if key containers are running
+            docker ps | grep -E "(frontend|backend)" && echo "✓ Services running" || echo "✗ Services not found"
