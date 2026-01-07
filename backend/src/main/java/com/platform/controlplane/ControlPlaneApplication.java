@@ -19,7 +19,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * - Circuit breakers and retry mechanisms
  * - Comprehensive observability (metrics, logs, traces)
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+    io.opentelemetry.instrumentation.spring.autoconfigure.OpenTelemetryAutoConfiguration.class,
+    io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpSpanExporterAutoConfiguration.class
+})
 @EnableAsync
 @EnableScheduling
 public class ControlPlaneApplication {
