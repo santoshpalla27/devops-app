@@ -27,6 +27,8 @@ jobs:
           username: ec2-user
           key: ${{ secrets.SSH_IP}}
           script: |
+            git clone https://github.com/santoshpalla27/devops-app.git
+            cd devops-app
             docker compose up -d   
 
 
@@ -86,9 +88,6 @@ jobs:
     needs: build-frontend
     if: ${{ needs.build-frontend.result == 'success' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -100,11 +99,14 @@ jobs:
           username: ec2-user
           key: ${{ secrets.SSH_IP }}
           script: |
+            cd devops-app
+            git pull origin main
             # Stop frontend and remove volumes
             docker compose down frontend --volumes --remove-orphans
             
             # Clean frontend-related images and cache
             docker image prune -af --filter "label=service=frontend"
+
             docker builder prune -af
             
             # Rebuild and start frontend
@@ -158,7 +160,9 @@ jobs:
           host: ${{ secrets.EC2_IP }}
           username: ec2-user
           key: ${{ secrets.SSH_IP }}
-          script: |
+          script: | 
+            cd devops-app
+            git pull origin main
             # Stop backend and remove volumes
             docker compose down backend --volumes --remove-orphans
 
@@ -195,6 +199,8 @@ jobs:
           username: ec2-user
           key: ${{ secrets.SSH_IP }}
           script: |
+            cd devops-app
+            git pull origin main
             # Stop and remove containers, networks, volumes
             docker compose down -v --remove-orphans
             
