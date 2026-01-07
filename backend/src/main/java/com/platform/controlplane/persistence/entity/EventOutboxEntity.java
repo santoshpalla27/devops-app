@@ -46,7 +46,7 @@ public class EventOutboxEntity {
     private String payload;
     
     @Enumerated(EnumType.STRING)
-    @Column(length = 20, nullable = false)
+    @Column(name = "status", columnDefinition = "VARCHAR(20)", nullable = false)
     @Builder.Default
     private OutboxStatus status = OutboxStatus.PENDING;
     

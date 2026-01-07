@@ -39,7 +39,7 @@ public class PolicyExecutionRecordEntity {
     private String systemType;
     
     @Enumerated(EnumType.STRING)
-    @Column(length = 50, nullable = false)
+    @Column(name = "action", columnDefinition = "VARCHAR(50)", nullable = false)
     private PolicyAction action;
     
     @Column(nullable = false)

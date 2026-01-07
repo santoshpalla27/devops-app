@@ -48,11 +48,11 @@ public class PolicyEntity {
     private String conditionJson;
     
     @Enumerated(EnumType.STRING)
-    @Column(length = 50, nullable = false)
+    @Column(name = "action", columnDefinition = "VARCHAR(50)", nullable = false)
     private PolicyAction action;
     
     @Enumerated(EnumType.STRING)
-    @Column(length = 20, nullable = false)
+    @Column(name = "severity", columnDefinition = "VARCHAR(20)", nullable = false)
     @Builder.Default
     private PolicySeverity severity = PolicySeverity.MEDIUM;
     

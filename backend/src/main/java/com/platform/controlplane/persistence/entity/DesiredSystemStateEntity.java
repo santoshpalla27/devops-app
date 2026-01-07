@@ -29,7 +29,7 @@ public class DesiredSystemStateEntity {
     private String systemType;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "desired_state", length = 50, nullable = false)
+    @Column(name = "desired_state", columnDefinition = "VARCHAR(50)", nullable = false)
     private SystemState desiredState;
     
     @Column(name = "max_latency_ms", nullable = false)
