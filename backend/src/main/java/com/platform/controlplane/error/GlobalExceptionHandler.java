@@ -478,7 +478,7 @@ public class GlobalExceptionHandler {
                 HttpStatus.UNAUTHORIZED;
             case FORBIDDEN -> 
                 HttpStatus.FORBIDDEN;
-            case DATABASE_UNAVAILABLE, KAFKA_UNAVAILABLE, REDIS_UNAVAILABLE, TOXIPROXY_UNAVAILABLE ->
+            case DATABASE_ERROR, KAFKA_UNAVAILABLE, REDIS_UNAVAILABLE, TOXIPROXY_UNAVAILABLE ->
                 HttpStatus.SERVICE_UNAVAILABLE;
             default -> 
                 HttpStatus.INTERNAL_SERVER_ERROR;
