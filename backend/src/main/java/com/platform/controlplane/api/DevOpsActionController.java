@@ -18,7 +18,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/actions")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class DevOpsActionController {
     
     private final OrchestratorService orchestratorService;

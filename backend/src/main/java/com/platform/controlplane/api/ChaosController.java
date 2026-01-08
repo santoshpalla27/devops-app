@@ -15,7 +15,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/chaos")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*", allowCredentials = "false")
 public class ChaosController {
     
     private final ChaosService chaosService;
