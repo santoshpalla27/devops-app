@@ -18,7 +18,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/actions")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "${controlplane.websocket.allowed-origins}")
+@CrossOrigin(origins = "*")
 public class DevOpsActionController {
     
     private final OrchestratorService orchestratorService;
