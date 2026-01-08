@@ -1,0 +1,54 @@
+{
+    "index_patterns": [
+        "security-events-*"
+    ],
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "security-events-policy",
+            "index.lifecycle.rollover_alias": "security-events"
+        },
+        "mappings": {
+            "properties": {
+                "@timestamp": {
+                    "type": "date"
+                },
+                "event_type": {
+                    "type": "keyword"
+                },
+                "severity": {
+                    "type": "keyword"
+                },
+                "source_ip": {
+                    "type": "ip"
+                },
+                "destination_ip": {
+                    "type": "ip"
+                },
+                "user": {
+                    "type": "keyword"
+                },
+                "action": {
+                    "type": "keyword"
+                },
+                "outcome": {
+                    "type": "keyword"
+                },
+                "threat_indicator": {
+                    "type": "keyword"
+                },
+                "details": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "keyword"
+                },
+                "environment": {
+                    "type": "keyword"
+                }
+            }
+        }
+    },
+    "priority": 100
+}

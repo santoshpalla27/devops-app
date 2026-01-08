@@ -1,0 +1,48 @@
+{
+    "index_patterns": [
+        "chaos-events-*"
+    ],
+    "template": {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "index.lifecycle.name": "chaos-events-policy",
+            "index.lifecycle.rollover_alias": "chaos-events"
+        },
+        "mappings": {
+            "properties": {
+                "@timestamp": {
+                    "type": "date"
+                },
+                "experiment_id": {
+                    "type": "keyword"
+                },
+                "experiment_type": {
+                    "type": "keyword"
+                },
+                "target_system": {
+                    "type": "keyword"
+                },
+                "status": {
+                    "type": "keyword"
+                },
+                "duration_ms": {
+                    "type": "long"
+                },
+                "fault_config": {
+                    "type": "object"
+                },
+                "impact": {
+                    "type": "object"
+                },
+                "service": {
+                    "type": "keyword"
+                },
+                "environment": {
+                    "type": "keyword"
+                }
+            }
+        }
+    },
+    "priority": 100
+}
