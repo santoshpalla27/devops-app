@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +38,7 @@ public interface EventOutboxRepository extends JpaRepository<EventOutboxEntity, 
      * Uses optimistic locking to prevent concurrent dispatch.
      */
     @Modifying
+    @Transactional
     @Query("UPDATE EventOutboxEntity e SET e.status = 'PROCESSING', e.updatedAt = :now " +
            "WHERE e.id = :id AND e.status = 'PENDING'")
     int markAsProcessing(@Param("id") String id, @Param("now") Instant now);
@@ -69,6 +71,7 @@ public interface EventOutboxRepository extends JpaRepository<EventOutboxEntity, 
      * Reset stale processing events back to pending.
      */
     @Modifying
+    @Transactional
     @Query("UPDATE EventOutboxEntity e SET e.status = 'PENDING', e.updatedAt = :now " +
            "WHERE e.status = 'PROCESSING' AND e.updatedAt < :staleThreshold")
     int resetStaleProcessingEvents(
@@ -85,6 +88,7 @@ public interface EventOutboxRepository extends JpaRepository<EventOutboxEntity, 
      * Delete old delivered events (cleanup).
      */
     @Modifying
+    @Transactional
     @Query("DELETE FROM EventOutboxEntity e WHERE e.status = 'DELIVERED' AND e.deliveredAt < :before")
     int deleteDeliveredEventsBefore(@Param("before") Instant before);
     
