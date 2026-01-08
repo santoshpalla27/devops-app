@@ -22,7 +22,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication(exclude = {
     io.opentelemetry.instrumentation.spring.autoconfigure.OpenTelemetryAutoConfiguration.class,
     io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpSpanExporterAutoConfiguration.class,
-    io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpLogRecordExporterAutoConfiguration.class
+    io.opentelemetry.instrumentation.spring.autoconfigure.exporters.otlp.OtlpLogRecordExporterAutoConfiguration.class,
+    io.opentelemetry.instrumentation.spring.autoconfigure.propagators.PropagationAutoConfiguration.class
 })
 @EnableAsync
 @EnableScheduling
